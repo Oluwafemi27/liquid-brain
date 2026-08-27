@@ -1,0 +1,130 @@
+// Shapes mirror the future FastAPI response payloads (snake-free, camelCase DTOs).
+export type Trend = "up" | "down" | "flat";
+
+export interface SubTask {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+export interface Goal {
+  id: string;
+  title: string;
+  target: number;
+  current: number;
+  currency: string;
+  due: string;
+  subTasks: SubTask[];
+}
+
+export type ChannelId = "website" | "whatsapp" | "crm" | "payments" | "ads" | "email";
+
+export interface Automation {
+  id: ChannelId;
+  name: string;
+  enabled: boolean;
+  trigger: string;
+  action: string;
+  goal: string;
+  runs: number;
+}
+
+export interface MemoryNode {
+  id: string;
+  label: string;
+  group: "customers" | "products" | "revenue" | "traffic" | "core";
+  facts: number;
+  x: number; // normalised layout 0-100
+  y: number;
+}
+
+export interface MemoryEdge {
+  from: string;
+  to: string;
+}
+
+export interface DataSource {
+  id: string;
+  name: string;
+  category: string;
+  connected: boolean;
+}
+
+export interface SeriesPoint {
+  month: string;
+  sales: number;
+  leads: number;
+  retention: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "aduf";
+  text: string;
+}
+
+export type InsightSeverity = "info" | "success" | "warning";
+
+export interface Insight {
+  id: string;
+  title: string;
+  body: string;
+  severity: InsightSeverity;
+  source: string;
+  createdAt: number;
+  read: boolean;
+}
+
+export type DealStage = "New" | "Contacted" | "Negotiation" | "Won";
+
+export interface CrmDeal {
+  id: string;
+  name: string;
+  company: string;
+  value: number;
+  stage: DealStage;
+  owner: string;
+  probability: number; // 0-100
+}
+
+export interface TopCustomer {
+  id: string;
+  name: string;
+  segment: string;
+  ltv: number;
+  orders: number;
+  lastOrder: string;
+  trend: Trend;
+}
+
+export interface ChannelRevenue {
+  channel: string;
+  value: number;
+  color: string;
+}
+
+export interface FunnelStage {
+  label: string;
+  value: number;
+}
+
+export type Weekday = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
+
+export type ScheduleCategory =
+  | "meeting"
+  | "content"
+  | "campaign"
+  | "automation"
+  | "followup"
+  | "other";
+
+export interface ScheduleEvent {
+  id: string;
+  title: string;
+  day: Weekday;
+  startTime: string; // 24h "HH:MM"
+  endTime: string; // 24h "HH:MM"
+  category: ScheduleCategory;
+  notes: string;
+  done: boolean;
+}
