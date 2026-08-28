@@ -70,15 +70,6 @@ function latitudeRing(deg: number): Vec3[] {
   return pts;
 }
 
-function orbitRing(width: number, height: number): Vec3[] {
-  const pts: Vec3[] = [];
-  for (let i = 0; i <= RING_SEGMENTS; i++) {
-    const t = (i / RING_SEGMENTS) * Math.PI * 2;
-    pts.push({ x: Math.cos(t) * width, y: Math.sin(t) * height, z: 0 });
-  }
-  return pts;
-}
-
 function rotateZ(p: Vec3, a: number): Vec3 {
   const s = Math.sin(a);
   const c = Math.cos(a);
@@ -102,12 +93,11 @@ function longitudeRing(deg: number): Vec3[] {
 const LAT_RINGS = [-60, -30, 0, 30, 60].map(latitudeRing);
 const LON_RINGS = [0, 30, 60, 90, 120, 150].map(longitudeRing);
 const ORBIT_RINGS = [
-  { width: 1.3, height: 0.52, tilt: 0.22, phase: 0, direction: 1 },
-  { width: 1.2, height: 0.48, tilt: -0.5, phase: Math.PI / 3, direction: -1 },
+  { width: 1.3, height: 0.52, phase: 0, direction: 1 },
+  { width: 1.2, height: 0.48, phase: Math.PI / 3, direction: -1 },
   {
     width: 1.35,
     height: 0.4,
-    tilt: 0.82,
     phase: (Math.PI * 2) / 3,
     direction: 1,
   },
@@ -224,16 +214,27 @@ export function MemoryGlobe({
         return d;
       };
 
+      const projectOrbit = (width: number, height: number, rotation: number) => {
+        let d = "";
+        const sin = Math.sin(rotation);
+        const cos = Math.cos(rotation);
+        for (let i = 0; i <= RING_SEGMENTS; i++) {
+          const t = (i / RING_SEGMENTS) * Math.PI * 2;
+          const x = Math.cos(t) * width * pxPerUnit;
+          const y = Math.sin(t) * height * pxPerUnit;
+          const sx = cx + x * cos - y * sin;
+          const sy = cy + x * sin + y * cos;
+          d += `${i === 0 ? "M" : "L"}${sx.toFixed(1)},${sy.toFixed(1)} `;
+        }
+        return d;
+      };
+
       orbitRefs.current.forEach((el, i) => {
         const orbit = ORBIT_RINGS[i];
         if (orbit) {
           el.setAttribute(
             "d",
-            projectRing(
-              orbitRing(orbit.width, orbit.height),
-              orbit.phase + yaw * 0.35 * orbit.direction,
-              orbit.tilt,
-            ),
+            projectOrbit(orbit.width, orbit.height, orbit.phase + yaw * 0.35 * orbit.direction),
           );
         }
       });
@@ -316,7 +317,7 @@ export function MemoryGlobe({
         src="https://cdn.builder.io/api/v1/image/assets%2F383f2020b40d46f681094fb49674d747%2F7bab7b0c417349c4b1f1e4a5d1501c09?format=webp&width=800&height=1200"
         alt=""
         aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1/2 z-0 aspect-square w-[min(92%,560px)] -translate-x-1/2 -translate-y-1/2 rounded-full object-cover opacity-45 mix-blend-screen"
+        className="pointer-events-none absolute left-1/2 top-1/2 z-0 aspect-square w-[min(92%,560px)] -translate-x-1/2 -translate-y-1/2 rounded-full object-cover opacity-60 mix-blend-screen"
         style={{
           maskImage: "radial-gradient(circle, black 58%, transparent 73%)",
           WebkitMaskImage: "radial-gradient(circle, black 58%, transparent 73%)",
@@ -337,27 +338,27 @@ export function MemoryGlobe({
         </defs>
 
         {/* orbital paths */}
-        <g stroke="var(--cyan)" fill="none" strokeWidth={1.4} strokeLinecap="round">
+        <g stroke="var(--cyan)" fill="none" strokeWidth={2.2} strokeLinecap="round">
           {ORBIT_RINGS.map((_, i) => (
             <path
               key={`orbit-${i}`}
               ref={(el) => {
                 if (el) orbitRefs.current[i] = el;
               }}
-              strokeOpacity={0.48}
+              strokeOpacity={0.7}
             />
           ))}
         </g>
 
         {/* wireframe sphere */}
-        <g stroke="var(--cyan)" fill="none" strokeWidth={1.1}>
+        <g stroke="var(--cyan)" fill="none" strokeWidth={1.8}>
           {LAT_RINGS.map((_, i) => (
             <path
               key={`lat-${i}`}
               ref={(el) => {
                 if (el) latRefs.current[i] = el;
               }}
-              strokeOpacity={0.26}
+              strokeOpacity={0.42}
             />
           ))}
           {LON_RINGS.map((_, i) => (
@@ -366,7 +367,7 @@ export function MemoryGlobe({
               ref={(el) => {
                 if (el) lonRefs.current[i] = el;
               }}
-              strokeOpacity={0.26}
+              strokeOpacity={0.42}
             />
           ))}
         </g>
