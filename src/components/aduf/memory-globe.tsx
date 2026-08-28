@@ -102,9 +102,15 @@ function longitudeRing(deg: number): Vec3[] {
 const LAT_RINGS = [-60, -30, 0, 30, 60].map(latitudeRing);
 const LON_RINGS = [0, 30, 60, 90, 120, 150].map(longitudeRing);
 const ORBIT_RINGS = [
-  { width: 1.3, height: 0.52, tilt: 0.22, phase: 0 },
-  { width: 1.2, height: 0.48, tilt: -0.5, phase: Math.PI / 3 },
-  { width: 1.35, height: 0.4, tilt: 0.82, phase: (Math.PI * 2) / 3 },
+  { width: 1.3, height: 0.52, tilt: 0.22, phase: 0, direction: 1 },
+  { width: 1.2, height: 0.48, tilt: -0.5, phase: Math.PI / 3, direction: -1 },
+  {
+    width: 1.35,
+    height: 0.4,
+    tilt: 0.82,
+    phase: (Math.PI * 2) / 3,
+    direction: 1,
+  },
 ];
 
 /**
@@ -223,7 +229,11 @@ export function MemoryGlobe({
         if (orbit) {
           el.setAttribute(
             "d",
-            projectRing(orbitRing(orbit.width, orbit.height), orbit.phase + yaw * 0.35, orbit.tilt),
+            projectRing(
+              orbitRing(orbit.width, orbit.height),
+              orbit.phase + yaw * 0.35 * orbit.direction,
+              orbit.tilt,
+            ),
           );
         }
       });
