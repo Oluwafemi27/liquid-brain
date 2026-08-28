@@ -1,6 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Check, Plus } from "lucide-react";
+import {
+  ArrowUpRight,
+  BarChart3,
+  CalendarCheck2,
+  Check,
+  Plus,
+  Target,
+  TrendingUp,
+  Trophy,
+} from "lucide-react";
 import { useState } from "react";
 import { AppShell, PageHeader } from "@/components/aduf/app-shell";
 import { GlassCard, WaterOrb } from "@/components/aduf/liquid";
@@ -149,6 +158,130 @@ function GoalsPage() {
             );
           })}
         </div>
+
+        <section className="mt-8 space-y-4" aria-labelledby="achievements-heading">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Momentum</p>
+              <h2 id="achievements-heading" className="mt-1 text-xl font-semibold">
+                Achievements
+              </h2>
+            </div>
+            <span className="text-xs text-muted-foreground">This quarter</span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <GlassCard className="flex items-center gap-4 p-5">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-amber-400/15 text-amber-300">
+                <Trophy className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-2xl font-semibold">12</p>
+                <p className="text-xs text-muted-foreground">Milestones reached</p>
+              </div>
+            </GlassCard>
+            <GlassCard className="flex items-center gap-4 p-5">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-emerald-400/15 text-emerald-300">
+                <Target className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-2xl font-semibold">86%</p>
+                <p className="text-xs text-muted-foreground">Average goal completion</p>
+              </div>
+            </GlassCard>
+            <GlassCard className="flex items-center gap-4 p-5">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-cyan-400/15 text-cyan-300">
+                <CalendarCheck2 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-2xl font-semibold">9 days</p>
+                <p className="text-xs text-muted-foreground">Current streak</p>
+              </div>
+            </GlassCard>
+          </div>
+          <GlassCard className="grid gap-4 p-5 sm:grid-cols-3">
+            {[
+              ["First ₦1M month", "Revenue", "Achieved Jun 12"],
+              ["100 new customers", "Growth", "Achieved Jun 18"],
+              ["Zero overdue tasks", "Execution", "Achieved Jun 24"],
+            ].map(([title, category, date]) => (
+              <div key={title} className="flex items-center gap-3 rounded-2xl bg-white/5 p-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-cyan-300/35 text-cyan-300">
+                  <Check className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{title}</p>
+                  <p className="text-[11px] text-muted-foreground">{category} · {date}</p>
+                </div>
+              </div>
+            ))}
+          </GlassCard>
+        </section>
+
+        <section className="mt-8 space-y-4" aria-labelledby="analytics-heading">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Performance view</p>
+              <h2 id="analytics-heading" className="mt-1 text-xl font-semibold">
+                Goal Analytics
+              </h2>
+            </div>
+            <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+              View report <ArrowUpRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+            <GlassCard className="p-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-cyan-300" />
+                  <h3 className="text-sm font-semibold">Progress velocity</h3>
+                </div>
+                <span className="flex items-center gap-1 text-xs text-emerald-300">
+                  <TrendingUp className="h-3.5 w-3.5" /> 18.4%
+                </span>
+              </div>
+              <div className="mt-6 flex h-40 items-end gap-2 sm:gap-4">
+                {[42, 56, 48, 68, 62, 78, 91, 84, 100, 94, 108, 118].map((height, i) => (
+                  <div key={i} className="group flex h-full flex-1 flex-col items-center justify-end gap-2">
+                    <div
+                      className="w-full rounded-t-lg bg-gradient-to-t from-cyan-400/25 to-cyan-200/90 transition-all group-hover:from-cyan-400/50"
+                      style={{ height: `${height}px` }}
+                    />
+                    <span className="text-[10px] text-muted-foreground">
+                      {["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"][i]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </GlassCard>
+            <GlassCard className="p-5">
+              <div className="flex items-center gap-2">
+                <Target className="h-4 w-4 text-violet-300" />
+                <h3 className="text-sm font-semibold">Goal health</h3>
+              </div>
+              <div className="mt-5 space-y-5">
+                {[
+                  ["On track", "68%", "bg-emerald-300", "6 goals"],
+                  ["Needs attention", "22%", "bg-amber-300", "2 goals"],
+                  ["At risk", "10%", "bg-rose-300", "1 goal"],
+                ].map(([label, width, color, count]) => (
+                  <div key={label}>
+                    <div className="mb-2 flex justify-between text-xs">
+                      <span>{label}</span>
+                      <span className="text-muted-foreground">{count} · {width}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/8">
+                      <div className={`h-full rounded-full ${color}`} style={{ width }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-6 rounded-2xl border border-border bg-white/5 p-3 text-xs text-muted-foreground">
+                Your team is completing goals <span className="font-medium text-foreground">24% faster</span> than last quarter.
+              </div>
+            </GlassCard>
+          </div>
+        </section>
       </div>
     </AppShell>
   );
