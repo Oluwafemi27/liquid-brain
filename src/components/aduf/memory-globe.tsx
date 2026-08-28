@@ -170,8 +170,8 @@ export function MemoryGlobe({
       const cy = rect.height / 2;
       const minDim = Math.min(rect.width, rect.height);
       const maxScale = PERSPECTIVE / (PERSPECTIVE - 1);
-      const margin = 24;
-      const pxPerUnit = Math.max(30, Math.min(240, (minDim / 2 - margin) / maxScale));
+      const margin = 10;
+      const pxPerUnit = Math.max(30, Math.min(300, (minDim / 2 - margin) / maxScale));
 
       posById.clear();
 
@@ -300,6 +300,16 @@ export function MemoryGlobe({
         className="pointer-events-none absolute inset-0"
         style={{
           background: "radial-gradient(closest-side, oklch(1 0 0 / 8%), transparent 72%)",
+        }}
+      />
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets%2F383f2020b40d46f681094fb49674d747%2F7bab7b0c417349c4b1f1e4a5d1501c09?format=webp&width=800&height=1200"
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-1/2 z-0 aspect-square w-[min(92%,560px)] -translate-x-1/2 -translate-y-1/2 rounded-full object-cover opacity-45 mix-blend-screen"
+        style={{
+          maskImage: "radial-gradient(circle, black 58%, transparent 73%)",
+          WebkitMaskImage: "radial-gradient(circle, black 58%, transparent 73%)",
         }}
       />
       {/* Hologram projector base */}
