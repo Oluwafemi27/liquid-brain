@@ -54,6 +54,29 @@ interface AdufState {
   removeScheduleEvent: (id: string) => void;
 }
 
+const previewMemoryNodes: MemoryNode[] = [
+  { id: "aduf", label: "ADUF", group: "core", facts: 1248, x: 50, y: 50 },
+  { id: "customers", label: "Customers", group: "customers", facts: 486, x: 23, y: 28 },
+  { id: "repeat-buyers", label: "Repeat buyers", group: "customers", facts: 184, x: 17, y: 67 },
+  { id: "catalog", label: "Product catalog", group: "products", facts: 312, x: 72, y: 24 },
+  { id: "best-sellers", label: "Best sellers", group: "products", facts: 96, x: 84, y: 55 },
+  { id: "sales", label: "Sales", group: "revenue", facts: 228, x: 76, y: 75 },
+  { id: "checkout", label: "Checkout", group: "revenue", facts: 74, x: 45, y: 87 },
+  { id: "website", label: "Website traffic", group: "traffic", facts: 268, x: 25, y: 78 },
+];
+
+const previewMemoryEdges: MemoryEdge[] = [
+  { from: "aduf", to: "customers" },
+  { from: "aduf", to: "catalog" },
+  { from: "aduf", to: "sales" },
+  { from: "aduf", to: "website" },
+  { from: "customers", to: "repeat-buyers" },
+  { from: "catalog", to: "best-sellers" },
+  { from: "best-sellers", to: "sales" },
+  { from: "website", to: "checkout" },
+  { from: "checkout", to: "sales" },
+];
+
 function makeInsight(partial: Omit<Insight, "id" | "createdAt" | "read">): Insight {
   return {
     ...partial,
@@ -72,9 +95,12 @@ export const useAduf = create<AdufState>((set, get) => ({
   funnel: [],
   goals: [],
   automations: initialAutomations,
-  memoryNodes: [],
-  memoryEdges: [],
-  sources: initialDataSources,
+  memoryNodes: previewMemoryNodes,
+  memoryEdges: previewMemoryEdges,
+  sources: initialDataSources.map((source) => ({
+    ...source,
+    connected: ["shopify", "ga", "paystack"].includes(source.id),
+  })),
   messages: [],
   thinking: false,
   insights: initialInsights,
