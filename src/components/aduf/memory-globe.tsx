@@ -170,8 +170,8 @@ export function MemoryGlobe({
       const cy = rect.height / 2;
       const minDim = Math.min(rect.width, rect.height);
       const maxScale = PERSPECTIVE / (PERSPECTIVE - 1);
-      const margin = 48; // reserves room for chip half-width + glow so nothing clips the frame
-      const pxPerUnit = Math.max(30, Math.min(190, (minDim / 2 - margin) / maxScale));
+      const margin = 24;
+      const pxPerUnit = Math.max(30, Math.min(240, (minDim / 2 - margin) / maxScale));
 
       posById.clear();
 
@@ -354,7 +354,7 @@ export function MemoryGlobe({
       </svg>
 
       {placed.map((p) => {
-        const size = p.isCore ? 76 : 44;
+        const size = p.isCore ? 62 : 34;
         const color = GROUP_COLOR[p.node.group];
         return (
           <button
@@ -374,10 +374,12 @@ export function MemoryGlobe({
               width: size,
               height: size,
               opacity: 0,
+              background: "oklch(0.12 0.03 220 / 0.94)",
+              border: `1px solid color-mix(in oklab, ${color} 78%, white 12%)`,
               boxShadow:
                 focus === p.node.id
-                  ? "var(--shadow-glass), var(--glow-cyan)"
-                  : `var(--shadow-glass), 0 0 0 1px color-mix(in oklab, ${color} 55%, transparent) inset`,
+                  ? "var(--shadow-glass), var(--glow-cyan), 0 0 18px color-mix(in oklab, var(--cyan) 55%, transparent)"
+                  : `var(--shadow-glass), 0 0 12px color-mix(in oklab, ${color} 22%, transparent)`,
             }}
           >
             <span className="block truncate font-display text-[11px] font-semibold">
