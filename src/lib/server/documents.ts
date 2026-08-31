@@ -2,7 +2,6 @@ import "@tanstack/react-start/server-only";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import mammoth from "mammoth";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { PDFParse } from "pdf-parse";
 import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
 
 export type DocFormat = "txt" | "md" | "docx" | "pdf";
@@ -107,6 +106,7 @@ export async function extractText(format: DocFormat, bytes: Uint8Array): Promise
     const { value } = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
     return value;
   }
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: bytes });
   const result = await parser.getText();
   return result.text;
