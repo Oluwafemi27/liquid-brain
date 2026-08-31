@@ -57,10 +57,53 @@ export interface SeriesPoint {
   retention: number;
 }
 
+export interface ChatQuestionOption {
+  id: string;
+  label: string;
+  value: string;
+}
+
+/** A questionnaire-style prompt the agent can attach to a reply instead of
+ *  (or alongside) free text — rendered as tappable option chips. */
+export interface ChatQuestion {
+  prompt: string;
+  options: ChatQuestionOption[];
+  multi?: boolean;
+}
+
+export type AgentTraceStatus = "running" | "done" | "error";
+
+/** One step of the agent's visible working — shown inside the collapsible
+ *  "agent is working" panel under a reply. */
+export interface AgentTraceStep {
+  id: string;
+  label: string;
+  detail?: string;
+  status: AgentTraceStatus;
+}
+
+export interface ChatAttachment {
+  id: string;
+  filename: string;
+  format: "txt" | "md" | "docx" | "pdf";
+  mimeType: string;
+  sizeBytes: number;
+  previewText?: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "aduf";
   text: string;
+  /** Present when the agent wants the user to pick from options. */
+  question?: ChatQuestion;
+  /** Option value(s) the user already picked, once a question is answered. */
+  answeredValues?: string[];
+  /** Visible-on-demand trace of what the agent did to produce this reply. */
+  trace?: AgentTraceStep[];
+  /** Files the agent created while producing this reply — previewable and
+   *  downloadable from the chat. */
+  attachments?: ChatAttachment[];
 }
 
 export type InsightSeverity = "info" | "success" | "warning";
@@ -111,12 +154,7 @@ export interface FunnelStage {
 export type Weekday = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
 
 export type ScheduleCategory =
-  | "meeting"
-  | "content"
-  | "campaign"
-  | "automation"
-  | "followup"
-  | "other";
+  "meeting" | "content" | "campaign" | "automation" | "followup" | "other";
 
 export interface ScheduleEvent {
   id: string;

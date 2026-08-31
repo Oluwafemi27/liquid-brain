@@ -371,7 +371,6 @@ export function MemoryGlobe({
             />
           ))}
         </g>
-
       </svg>
 
       {placed.map((p) => {

@@ -20,8 +20,22 @@ import {
   initialDataSources,
   initialInsights,
   initialScheduleEvents,
-  noBackendReply,
 } from "@/lib/initial-data";
+
+function makeSessionId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `session-${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+}
+
+const MONEY_GOAL_PATTERN = /[₦$€£]|\b(sales|revenue|mrr|income|earn(ings)?|profit)\b/i;
+
+/** Detects whether a goal is money-denominated from its title, since the
+ *  form only collects a title + a bare number — "100 bookings" and
+ *  "₦5,000,000 in Sales" both arrive the same shape otherwise. Money goals
+ *  get a currency (shown converted to USD); everything else is a plain count. */
+function inferGoalCurrency(title: string): string {
+  return MONEY_GOAL_PATTERN.test(title) ? "₦" : "";
+}
 
 interface AdufState {
   userName: string;
@@ -37,6 +51,7 @@ interface AdufState {
   sources: DataSource[];
   messages: ChatMessage[];
   thinking: boolean;
+  sessionId: string;
   insights: Insight[];
   scheduleEvents: ScheduleEvent[];
   setUserName: (name: string) => void;
@@ -45,7 +60,11 @@ interface AdufState {
   bumpGoal: (goalId: string, amount: number) => void;
   addGoal: (title: string, target: number) => void;
   connectSource: (id: string) => void;
+  setSourceConnected: (id: string, connected: boolean) => void;
   sendMessage: (text: string) => void;
+  /** Records the user's pick(s) for a questionnaire message, then sends
+   *  their choice back into the conversation as the next user turn. */
+  answerQuestion: (messageId: string, values: string[], label: string) => void;
   markInsightRead: (id: string) => void;
   markAllInsightsRead: () => void;
   dismissInsight: (id: string) => void;
@@ -103,6 +122,7 @@ export const useAduf = create<AdufState>((set, get) => ({
   })),
   messages: [],
   thinking: false,
+  sessionId: makeSessionId(),
   insights: initialInsights,
   scheduleEvents: initialScheduleEvents,
 
@@ -169,7 +189,7 @@ export const useAduf = create<AdufState>((set, get) => ({
           title,
           target,
           current: 0,
-          currency: "₦",
+          currency: inferGoalCurrency(title),
           due: "Not set",
           subTasks: [],
         },
@@ -204,19 +224,68 @@ export const useAduf = create<AdufState>((set, get) => ({
       };
     }),
 
+  setSourceConnected: (id, connected) =>
+    set((s) => ({ sources: s.sources.map((d) => (d.id === id ? { ...d, connected } : d)) })),
+
   sendMessage: (text) => {
     const trimmed = text.trim();
     if (!trimmed || get().thinking) return;
+    const history = get().messages;
     set((s) => ({
       messages: [...s.messages, { id: `u-${Date.now()}`, role: "user", text: trimmed }],
       thinking: true,
     }));
-    setTimeout(() => {
-      set((s) => ({
-        messages: [...s.messages, { id: `a-${Date.now()}`, role: "aduf", text: noBackendReply }],
-        thinking: false,
-      }));
-    }, 900);
+
+    fetch("/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: trimmed, history, sessionId: get().sessionId }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`chat request failed (${res.status})`);
+        return (await res.json()) as {
+          reply: string;
+          question: ChatMessage["question"] | null;
+          trace?: ChatMessage["trace"];
+          attachments?: ChatMessage["attachments"];
+        };
+      })
+      .then((data) => {
+        set((s) => ({
+          messages: [
+            ...s.messages,
+            {
+              id: `a-${Date.now()}`,
+              role: "aduf",
+              text: data.reply,
+              ...(data.question ? { question: data.question } : {}),
+              ...(data.trace?.length ? { trace: data.trace } : {}),
+              ...(data.attachments?.length ? { attachments: data.attachments } : {}),
+            },
+          ],
+          thinking: false,
+        }));
+      })
+      .catch(() => {
+        set((s) => ({
+          messages: [
+            ...s.messages,
+            {
+              id: `a-${Date.now()}`,
+              role: "aduf",
+              text: "Couldn't reach the brain just now — check your connection and try again.",
+            },
+          ],
+          thinking: false,
+        }));
+      });
+  },
+
+  answerQuestion: (messageId, values, label) => {
+    set((s) => ({
+      messages: s.messages.map((m) => (m.id === messageId ? { ...m, answeredValues: values } : m)),
+    }));
+    get().sendMessage(label);
   },
 
   markInsightRead: (id) =>
@@ -227,8 +296,7 @@ export const useAduf = create<AdufState>((set, get) => ({
   markAllInsightsRead: () =>
     set((s) => ({ insights: s.insights.map((i) => ({ ...i, read: true })) })),
 
-  dismissInsight: (id) =>
-    set((s) => ({ insights: s.insights.filter((i) => i.id !== id) })),
+  dismissInsight: (id) => set((s) => ({ insights: s.insights.filter((i) => i.id !== id) })),
 
   addScheduleEvent: (event) =>
     set((s) => ({
@@ -249,9 +317,7 @@ export const useAduf = create<AdufState>((set, get) => ({
 
   toggleScheduleEventDone: (id) =>
     set((s) => ({
-      scheduleEvents: s.scheduleEvents.map((e) =>
-        e.id === id ? { ...e, done: !e.done } : e,
-      ),
+      scheduleEvents: s.scheduleEvents.map((e) => (e.id === id ? { ...e, done: !e.done } : e)),
     })),
 
   removeScheduleEvent: (id) =>

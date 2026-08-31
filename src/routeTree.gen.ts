@@ -17,6 +17,19 @@ import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiDocumentsRouteImport } from './routes/api/documents'
+import { Route as ApiFxRouteImport } from './routes/api/fx'
+import { Route as ApiModelKeysRouteImport } from './routes/api/model-keys'
+import { Route as ApiSkillsRouteImport } from './routes/api/skills'
+import { Route as ApiDocumentsConvertRouteImport } from './routes/api/documents/convert'
+import { Route as ApiDocumentsUploadRouteImport } from './routes/api/documents/upload'
+import { Route as ApiSkillsReplyRouteImport } from './routes/api/skills/reply'
+import { Route as ApiTasksRunRouteImport } from './routes/api/tasks/run'
+import { Route as ApiConnectorsProviderAuthorizeRouteImport } from './routes/api/connectors/$provider/authorize'
+import { Route as ApiConnectorsProviderCallbackRouteImport } from './routes/api/connectors/$provider/callback'
+import { Route as ApiDocumentsIdDownloadRouteImport } from './routes/api/documents/$id/download'
+import { Route as ApiDocumentsIdPreviewRouteImport } from './routes/api/documents/$id/preview'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -58,6 +71,73 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChatRoute = ApiChatRouteImport.update({
+  id: '/api/chat',
+  path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDocumentsRoute = ApiDocumentsRouteImport.update({
+  id: '/api/documents',
+  path: '/api/documents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiFxRoute = ApiFxRouteImport.update({
+  id: '/api/fx',
+  path: '/api/fx',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiModelKeysRoute = ApiModelKeysRouteImport.update({
+  id: '/api/model-keys',
+  path: '/api/model-keys',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSkillsRoute = ApiSkillsRouteImport.update({
+  id: '/api/skills',
+  path: '/api/skills',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDocumentsConvertRoute = ApiDocumentsConvertRouteImport.update({
+  id: '/convert',
+  path: '/convert',
+  getParentRoute: () => ApiDocumentsRoute,
+} as any)
+const ApiDocumentsUploadRoute = ApiDocumentsUploadRouteImport.update({
+  id: '/upload',
+  path: '/upload',
+  getParentRoute: () => ApiDocumentsRoute,
+} as any)
+const ApiSkillsReplyRoute = ApiSkillsReplyRouteImport.update({
+  id: '/reply',
+  path: '/reply',
+  getParentRoute: () => ApiSkillsRoute,
+} as any)
+const ApiTasksRunRoute = ApiTasksRunRouteImport.update({
+  id: '/api/tasks/run',
+  path: '/api/tasks/run',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiConnectorsProviderAuthorizeRoute =
+  ApiConnectorsProviderAuthorizeRouteImport.update({
+    id: '/api/connectors/$provider/authorize',
+    path: '/api/connectors/$provider/authorize',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiConnectorsProviderCallbackRoute =
+  ApiConnectorsProviderCallbackRouteImport.update({
+    id: '/api/connectors/$provider/callback',
+    path: '/api/connectors/$provider/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiDocumentsIdDownloadRoute = ApiDocumentsIdDownloadRouteImport.update({
+  id: '/$id/download',
+  path: '/$id/download',
+  getParentRoute: () => ApiDocumentsRoute,
+} as any)
+const ApiDocumentsIdPreviewRoute = ApiDocumentsIdPreviewRouteImport.update({
+  id: '/$id/preview',
+  path: '/$id/preview',
+  getParentRoute: () => ApiDocumentsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -68,6 +148,19 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof NotificationsRoute
   '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
+  '/api/chat': typeof ApiChatRoute
+  '/api/documents': typeof ApiDocumentsRouteWithChildren
+  '/api/fx': typeof ApiFxRoute
+  '/api/model-keys': typeof ApiModelKeysRoute
+  '/api/skills': typeof ApiSkillsRouteWithChildren
+  '/api/documents/convert': typeof ApiDocumentsConvertRoute
+  '/api/documents/upload': typeof ApiDocumentsUploadRoute
+  '/api/skills/reply': typeof ApiSkillsReplyRoute
+  '/api/tasks/run': typeof ApiTasksRunRoute
+  '/api/connectors/$provider/authorize': typeof ApiConnectorsProviderAuthorizeRoute
+  '/api/connectors/$provider/callback': typeof ApiConnectorsProviderCallbackRoute
+  '/api/documents/$id/download': typeof ApiDocumentsIdDownloadRoute
+  '/api/documents/$id/preview': typeof ApiDocumentsIdPreviewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -78,6 +171,19 @@ export interface FileRoutesByTo {
   '/notifications': typeof NotificationsRoute
   '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
+  '/api/chat': typeof ApiChatRoute
+  '/api/documents': typeof ApiDocumentsRouteWithChildren
+  '/api/fx': typeof ApiFxRoute
+  '/api/model-keys': typeof ApiModelKeysRoute
+  '/api/skills': typeof ApiSkillsRouteWithChildren
+  '/api/documents/convert': typeof ApiDocumentsConvertRoute
+  '/api/documents/upload': typeof ApiDocumentsUploadRoute
+  '/api/skills/reply': typeof ApiSkillsReplyRoute
+  '/api/tasks/run': typeof ApiTasksRunRoute
+  '/api/connectors/$provider/authorize': typeof ApiConnectorsProviderAuthorizeRoute
+  '/api/connectors/$provider/callback': typeof ApiConnectorsProviderCallbackRoute
+  '/api/documents/$id/download': typeof ApiDocumentsIdDownloadRoute
+  '/api/documents/$id/preview': typeof ApiDocumentsIdPreviewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -89,6 +195,19 @@ export interface FileRoutesById {
   '/notifications': typeof NotificationsRoute
   '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
+  '/api/chat': typeof ApiChatRoute
+  '/api/documents': typeof ApiDocumentsRouteWithChildren
+  '/api/fx': typeof ApiFxRoute
+  '/api/model-keys': typeof ApiModelKeysRoute
+  '/api/skills': typeof ApiSkillsRouteWithChildren
+  '/api/documents/convert': typeof ApiDocumentsConvertRoute
+  '/api/documents/upload': typeof ApiDocumentsUploadRoute
+  '/api/skills/reply': typeof ApiSkillsReplyRoute
+  '/api/tasks/run': typeof ApiTasksRunRoute
+  '/api/connectors/$provider/authorize': typeof ApiConnectorsProviderAuthorizeRoute
+  '/api/connectors/$provider/callback': typeof ApiConnectorsProviderCallbackRoute
+  '/api/documents/$id/download': typeof ApiDocumentsIdDownloadRoute
+  '/api/documents/$id/preview': typeof ApiDocumentsIdPreviewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -101,6 +220,19 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/schedule'
     | '/settings'
+    | '/api/chat'
+    | '/api/documents'
+    | '/api/fx'
+    | '/api/model-keys'
+    | '/api/skills'
+    | '/api/documents/convert'
+    | '/api/documents/upload'
+    | '/api/skills/reply'
+    | '/api/tasks/run'
+    | '/api/connectors/$provider/authorize'
+    | '/api/connectors/$provider/callback'
+    | '/api/documents/$id/download'
+    | '/api/documents/$id/preview'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -111,6 +243,19 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/schedule'
     | '/settings'
+    | '/api/chat'
+    | '/api/documents'
+    | '/api/fx'
+    | '/api/model-keys'
+    | '/api/skills'
+    | '/api/documents/convert'
+    | '/api/documents/upload'
+    | '/api/skills/reply'
+    | '/api/tasks/run'
+    | '/api/connectors/$provider/authorize'
+    | '/api/connectors/$provider/callback'
+    | '/api/documents/$id/download'
+    | '/api/documents/$id/preview'
   id:
     | '__root__'
     | '/'
@@ -121,6 +266,19 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/schedule'
     | '/settings'
+    | '/api/chat'
+    | '/api/documents'
+    | '/api/fx'
+    | '/api/model-keys'
+    | '/api/skills'
+    | '/api/documents/convert'
+    | '/api/documents/upload'
+    | '/api/skills/reply'
+    | '/api/tasks/run'
+    | '/api/connectors/$provider/authorize'
+    | '/api/connectors/$provider/callback'
+    | '/api/documents/$id/download'
+    | '/api/documents/$id/preview'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -132,6 +290,14 @@ export interface RootRouteChildren {
   NotificationsRoute: typeof NotificationsRoute
   ScheduleRoute: typeof ScheduleRoute
   SettingsRoute: typeof SettingsRoute
+  ApiChatRoute: typeof ApiChatRoute
+  ApiDocumentsRoute: typeof ApiDocumentsRouteWithChildren
+  ApiFxRoute: typeof ApiFxRoute
+  ApiModelKeysRoute: typeof ApiModelKeysRoute
+  ApiSkillsRoute: typeof ApiSkillsRouteWithChildren
+  ApiTasksRunRoute: typeof ApiTasksRunRoute
+  ApiConnectorsProviderAuthorizeRoute: typeof ApiConnectorsProviderAuthorizeRoute
+  ApiConnectorsProviderCallbackRoute: typeof ApiConnectorsProviderCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -192,8 +358,129 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/chat': {
+      id: '/api/chat'
+      path: '/api/chat'
+      fullPath: '/api/chat'
+      preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/documents': {
+      id: '/api/documents'
+      path: '/api/documents'
+      fullPath: '/api/documents'
+      preLoaderRoute: typeof ApiDocumentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/fx': {
+      id: '/api/fx'
+      path: '/api/fx'
+      fullPath: '/api/fx'
+      preLoaderRoute: typeof ApiFxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/model-keys': {
+      id: '/api/model-keys'
+      path: '/api/model-keys'
+      fullPath: '/api/model-keys'
+      preLoaderRoute: typeof ApiModelKeysRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/skills': {
+      id: '/api/skills'
+      path: '/api/skills'
+      fullPath: '/api/skills'
+      preLoaderRoute: typeof ApiSkillsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/documents/convert': {
+      id: '/api/documents/convert'
+      path: '/convert'
+      fullPath: '/api/documents/convert'
+      preLoaderRoute: typeof ApiDocumentsConvertRouteImport
+      parentRoute: typeof ApiDocumentsRoute
+    }
+    '/api/documents/upload': {
+      id: '/api/documents/upload'
+      path: '/upload'
+      fullPath: '/api/documents/upload'
+      preLoaderRoute: typeof ApiDocumentsUploadRouteImport
+      parentRoute: typeof ApiDocumentsRoute
+    }
+    '/api/skills/reply': {
+      id: '/api/skills/reply'
+      path: '/reply'
+      fullPath: '/api/skills/reply'
+      preLoaderRoute: typeof ApiSkillsReplyRouteImport
+      parentRoute: typeof ApiSkillsRoute
+    }
+    '/api/tasks/run': {
+      id: '/api/tasks/run'
+      path: '/api/tasks/run'
+      fullPath: '/api/tasks/run'
+      preLoaderRoute: typeof ApiTasksRunRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/connectors/$provider/authorize': {
+      id: '/api/connectors/$provider/authorize'
+      path: '/api/connectors/$provider/authorize'
+      fullPath: '/api/connectors/$provider/authorize'
+      preLoaderRoute: typeof ApiConnectorsProviderAuthorizeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/connectors/$provider/callback': {
+      id: '/api/connectors/$provider/callback'
+      path: '/api/connectors/$provider/callback'
+      fullPath: '/api/connectors/$provider/callback'
+      preLoaderRoute: typeof ApiConnectorsProviderCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/documents/$id/download': {
+      id: '/api/documents/$id/download'
+      path: '/$id/download'
+      fullPath: '/api/documents/$id/download'
+      preLoaderRoute: typeof ApiDocumentsIdDownloadRouteImport
+      parentRoute: typeof ApiDocumentsRoute
+    }
+    '/api/documents/$id/preview': {
+      id: '/api/documents/$id/preview'
+      path: '/$id/preview'
+      fullPath: '/api/documents/$id/preview'
+      preLoaderRoute: typeof ApiDocumentsIdPreviewRouteImport
+      parentRoute: typeof ApiDocumentsRoute
+    }
   }
 }
+
+interface ApiDocumentsRouteChildren {
+  ApiDocumentsConvertRoute: typeof ApiDocumentsConvertRoute
+  ApiDocumentsUploadRoute: typeof ApiDocumentsUploadRoute
+  ApiDocumentsIdDownloadRoute: typeof ApiDocumentsIdDownloadRoute
+  ApiDocumentsIdPreviewRoute: typeof ApiDocumentsIdPreviewRoute
+}
+
+const ApiDocumentsRouteChildren: ApiDocumentsRouteChildren = {
+  ApiDocumentsConvertRoute: ApiDocumentsConvertRoute,
+  ApiDocumentsUploadRoute: ApiDocumentsUploadRoute,
+  ApiDocumentsIdDownloadRoute: ApiDocumentsIdDownloadRoute,
+  ApiDocumentsIdPreviewRoute: ApiDocumentsIdPreviewRoute,
+}
+
+const ApiDocumentsRouteWithChildren = ApiDocumentsRoute._addFileChildren(
+  ApiDocumentsRouteChildren,
+)
+
+interface ApiSkillsRouteChildren {
+  ApiSkillsReplyRoute: typeof ApiSkillsReplyRoute
+}
+
+const ApiSkillsRouteChildren: ApiSkillsRouteChildren = {
+  ApiSkillsReplyRoute: ApiSkillsReplyRoute,
+}
+
+const ApiSkillsRouteWithChildren = ApiSkillsRoute._addFileChildren(
+  ApiSkillsRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -204,6 +491,14 @@ const rootRouteChildren: RootRouteChildren = {
   NotificationsRoute: NotificationsRoute,
   ScheduleRoute: ScheduleRoute,
   SettingsRoute: SettingsRoute,
+  ApiChatRoute: ApiChatRoute,
+  ApiDocumentsRoute: ApiDocumentsRouteWithChildren,
+  ApiFxRoute: ApiFxRoute,
+  ApiModelKeysRoute: ApiModelKeysRoute,
+  ApiSkillsRoute: ApiSkillsRouteWithChildren,
+  ApiTasksRunRoute: ApiTasksRunRoute,
+  ApiConnectorsProviderAuthorizeRoute: ApiConnectorsProviderAuthorizeRoute,
+  ApiConnectorsProviderCallbackRoute: ApiConnectorsProviderCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

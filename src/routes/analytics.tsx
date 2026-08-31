@@ -19,6 +19,7 @@ import {
 import { AppShell, PageHeader } from "@/components/aduf/app-shell";
 import { GlassCard, WaterBar } from "@/components/aduf/liquid";
 import type { CrmDeal, DealStage, Trend } from "@/lib/aduf-types";
+import { formatUsdCompact, toUsd, useUsdRates } from "@/lib/currency";
 import { useAduf } from "@/store/aduf-store";
 
 const stageOrder: DealStage[] = ["New", "Contacted", "Negotiation", "Won"];
@@ -28,12 +29,6 @@ const stageColor: Record<DealStage, string> = {
   Negotiation: "var(--chart-2)",
   Won: "var(--chart-1)",
 };
-
-function nairaShort(n: number) {
-  if (n >= 1000000) return `₦${(n / 1000000).toFixed(2)}M`;
-  if (n >= 1000) return `₦${Math.round(n / 1000)}k`;
-  return `₦${n}`;
-}
 
 function TrendIcon({ trend }: { trend: Trend }) {
   if (trend === "up") return <ArrowUpRight className="h-3.5 w-3.5 text-cyan" />;
@@ -71,6 +66,10 @@ function EmptyPanel({ label }: { label: string }) {
 function AnalyticsPage() {
   const { series, deals, topCustomers, channelRevenue, funnel } = useAduf();
   const [spend, setSpend] = useState(50);
+  const { rates } = useUsdRates();
+  // All mock/business figures in this app are entered in Naira — this is
+  // the single place that turns any of them into a USD display figure.
+  const usd = (ngnAmount: number) => formatUsdCompact(toUsd(ngnAmount, "NGN", rates));
 
   const dealsByStage = useMemo(() => {
     const grouped: Record<DealStage, CrmDeal[]> = {
@@ -195,14 +194,14 @@ function AnalyticsPage() {
           <GlassCard hover={false} className="min-w-0 lg:col-span-2">
             <h2 className="text-base font-semibold">What If Simulator</h2>
             <p className="mb-5 text-xs text-muted-foreground">
-              Drag to model a change before you spend a naira.
+              Drag to model a change before you spend a dollar.
             </p>
 
             <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
               <div>
                 <label className="text-sm" htmlFor="spend">
                   Increase Ad Spend by{" "}
-                  <span className="font-display font-semibold">₦{spend.toLocaleString()}k</span>
+                  <span className="font-display font-semibold">{usd(spend * 1000)}</span>
                 </label>
                 <input
                   id="spend"
@@ -234,7 +233,7 @@ function AnalyticsPage() {
                       animate={{ opacity: 1, y: 0 }}
                       className="font-display text-2xl font-semibold"
                     >
-                      +₦{predictedSales.toLocaleString()}
+                      +{usd(predictedSales)}
                     </motion.p>
                   </div>
                   <WaterBar label="Model confidence" value={Math.max(30, 92 - spend / 4)} />
@@ -301,12 +300,12 @@ function AnalyticsPage() {
                 <div>
                   <h3 className="text-base font-semibold">Deal Pipeline</h3>
                   <p className="text-xs text-muted-foreground">
-                    {deals.length} active deals · {nairaShort(pipelineValue)} in motion
+                    {deals.length} active deals · {usd(pipelineValue)} in motion
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 rounded-full bg-white/6 px-3 py-1.5 text-[11px] text-muted-foreground">
                   <Trophy className="h-3.5 w-3.5 text-cyan" />
-                  {nairaShort(wonValue)} won this month
+                  {usd(wonValue)} won this month
                 </div>
               </div>
 
@@ -340,7 +339,7 @@ function AnalyticsPage() {
                           </span>
                         </div>
                         <p className="mb-2 px-1 text-[10px] text-muted-foreground">
-                          {nairaShort(stageTotal)}
+                          {usd(stageTotal)}
                         </p>
                         <div className="space-y-2">
                           {stageDeals.map((deal) => (
@@ -353,9 +352,7 @@ function AnalyticsPage() {
                                 {deal.name}
                               </p>
                               <div className="mt-2 flex items-center justify-between">
-                                <span className="text-[11px] font-semibold">
-                                  {nairaShort(deal.value)}
-                                </span>
+                                <span className="text-[11px] font-semibold">{usd(deal.value)}</span>
                                 <span
                                   className="rounded-full px-1.5 py-0.5 text-[9px]"
                                   style={{
@@ -450,7 +447,7 @@ function AnalyticsPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <p className="truncate text-sm font-medium">{c.name}</p>
-                          <p className="shrink-0 text-sm font-semibold">{nairaShort(c.ltv)}</p>
+                          <p className="shrink-0 text-sm font-semibold">{usd(c.ltv)}</p>
                         </div>
                         <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
                           <span className="truncate">{c.segment}</span>

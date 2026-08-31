@@ -173,17 +173,17 @@ function AutomationsPage() {
                       className="relative block"
                       aria-label={`Open ${a.name} automation`}
                     >
-                      <WaterOrb fill={a.enabled ? 74 : 0} size={84}>
+                      <WaterOrb fill={a.enabled ? 74 : 0} size={96}>
                         <Icon
                           className={cn(
                             "h-4 w-4",
                             a.enabled ? "text-cyan" : "text-muted-foreground",
                           )}
                         />
-                        <span className="mt-1 font-display text-[10px] font-semibold uppercase tracking-wider">
+                        <span className="mt-1 whitespace-nowrap font-display text-[9px] font-semibold uppercase tracking-wide leading-none">
                           {a.name}
                         </span>
-                        <span className="text-[9px] text-muted-foreground">
+                        <span className="mt-1 text-[8px] leading-none text-muted-foreground">
                           {a.enabled ? "ON" : "OFF"}
                         </span>
                       </WaterOrb>

@@ -13,6 +13,7 @@ import {
 import { useState } from "react";
 import { AppShell, PageHeader } from "@/components/aduf/app-shell";
 import { GlassCard, WaterOrb } from "@/components/aduf/liquid";
+import { formatUsd, toUsd, useUsdRates } from "@/lib/currency";
 import { useAduf } from "@/store/aduf-store";
 
 export const Route = createFileRoute("/goals")({
@@ -36,6 +37,9 @@ export const Route = createFileRoute("/goals")({
 
 function GoalsPage() {
   const { goals, toggleSubTask, bumpGoal, addGoal } = useAduf();
+  const { rates } = useUsdRates();
+  const formatGoalAmount = (amount: number, currency: string) =>
+    currency ? formatUsd(toUsd(amount, currency, rates)) : amount.toLocaleString();
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [target, setTarget] = useState("100");
@@ -107,9 +111,8 @@ function GoalsPage() {
                   </WaterOrb>
                   <h3 className="mt-4 text-base font-semibold">{goal.title}</h3>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {goal.currency}
-                    {goal.current.toLocaleString()} of {goal.currency}
-                    {goal.target.toLocaleString()}
+                    {formatGoalAmount(goal.current, goal.currency)} of{" "}
+                    {formatGoalAmount(goal.target, goal.currency)}
                   </p>
                 </div>
 
@@ -200,7 +203,7 @@ function GoalsPage() {
           </div>
           <GlassCard className="grid gap-4 p-5 sm:grid-cols-3">
             {[
-              ["First ₦1M month", "Revenue", "Achieved Jun 12"],
+              ["First $1,000 month", "Revenue", "Achieved Jun 12"],
               ["100 new customers", "Growth", "Achieved Jun 18"],
               ["Zero overdue tasks", "Execution", "Achieved Jun 24"],
             ].map(([title, category, date]) => (
@@ -210,7 +213,9 @@ function GoalsPage() {
                 </span>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{title}</p>
-                  <p className="text-[11px] text-muted-foreground">{category} · {date}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {category} · {date}
+                  </p>
                 </div>
               </div>
             ))}
@@ -220,7 +225,9 @@ function GoalsPage() {
         <section className="mt-8 space-y-4" aria-labelledby="analytics-heading">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Performance view</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                Performance view
+              </p>
               <h2 id="analytics-heading" className="mt-1 text-xl font-semibold">
                 Goal Analytics
               </h2>
@@ -242,7 +249,10 @@ function GoalsPage() {
               </div>
               <div className="mt-6 flex h-40 items-end gap-2 sm:gap-4">
                 {[42, 56, 48, 68, 62, 78, 91, 84, 100, 94, 108, 118].map((height, i) => (
-                  <div key={i} className="group flex h-full flex-1 flex-col items-center justify-end gap-2">
+                  <div
+                    key={i}
+                    className="group flex h-full flex-1 flex-col items-center justify-end gap-2"
+                  >
                     <div
                       className="w-full rounded-t-lg bg-gradient-to-t from-cyan-400/25 to-cyan-200/90 transition-all group-hover:from-cyan-400/50"
                       style={{ height: `${height}px` }}
@@ -268,7 +278,9 @@ function GoalsPage() {
                   <div key={label}>
                     <div className="mb-2 flex justify-between text-xs">
                       <span>{label}</span>
-                      <span className="text-muted-foreground">{count} · {width}</span>
+                      <span className="text-muted-foreground">
+                        {count} · {width}
+                      </span>
                     </div>
                     <div className="h-2 rounded-full bg-white/8">
                       <div className={`h-full rounded-full ${color}`} style={{ width }} />
@@ -277,7 +289,8 @@ function GoalsPage() {
                 ))}
               </div>
               <div className="mt-6 rounded-2xl border border-border bg-white/5 p-3 text-xs text-muted-foreground">
-                Your team is completing goals <span className="font-medium text-foreground">24% faster</span> than last quarter.
+                Your team is completing goals{" "}
+                <span className="font-medium text-foreground">24% faster</span> than last quarter.
               </div>
             </GlassCard>
           </div>

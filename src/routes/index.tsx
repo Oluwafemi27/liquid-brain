@@ -5,6 +5,9 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { AppShell } from "@/components/aduf/app-shell";
 import { GlassCard, ProgressRing } from "@/components/aduf/liquid";
 import { InsightRow } from "@/components/aduf/insight-feed";
+import { AgentQuestion } from "@/components/aduf/agent-question";
+import { AgentTracePanel } from "@/components/aduf/agent-trace";
+import { ChatAttachmentCard } from "@/components/aduf/chat-attachment";
 import { useAduf } from "@/store/aduf-store";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +37,28 @@ function greeting() {
   if (h < 18) return "Good Afternoon";
   return "Good Evening";
 }
+
+/** Minimal typings for the (non-standard, vendor-prefixed) Web Speech API —
+ *  there's no official DOM lib type for it. */
+interface SpeechRecognitionResultLike {
+  0: { transcript: string };
+  isFinal: boolean;
+}
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((e: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
 const suggestions = [
   "Why did sales drop?",
@@ -90,7 +115,7 @@ function GoalProgressBanner() {
                 value={pct}
                 label={`${Math.min(100, pct)}%`}
                 sublabel={g.title}
-                color={RING_COLORS[i % RING_COLORS.length]}
+                color={RING_COLORS[i % RING_COLORS.length] ?? "var(--accent)"}
               />
             );
           })}
@@ -147,7 +172,7 @@ function InsightFeedCard() {
 }
 
 function BrainPage() {
-  const { userName, messages, thinking, sendMessage } = useAduf();
+  const { userName, messages, thinking, sendMessage, answerQuestion } = useAduf();
   const [draft, setDraft] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [listening, setListening] = useState(false);
@@ -155,7 +180,14 @@ function BrainPage() {
   const hello = useMemo(greeting, []);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  /** Draft text as it was the moment the mic was turned on — speech is
+   *  appended after this, never overwrites what was already typed/said. */
+  const baseDraftRef = useRef("");
+  /** Speech confirmed as final since the mic turned on, kept separate from
+   *  the current in-flight interim guess so each onresult tick can replace
+   *  just the interim tail without losing earlier finalized words. */
+  const finalizedRef = useRef("");
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -163,8 +195,8 @@ function BrainPage() {
 
   useEffect(() => {
     const w = window as typeof window & {
-      SpeechRecognition?: new () => unknown;
-      webkitSpeechRecognition?: new () => unknown;
+      SpeechRecognition?: SpeechRecognitionCtor;
+      webkitSpeechRecognition?: SpeechRecognitionCtor;
     };
     setSpeechSupported(Boolean(w.SpeechRecognition || w.webkitSpeechRecognition));
   }, []);
@@ -177,19 +209,35 @@ function BrainPage() {
       return;
     }
     const w = window as typeof window & {
-      SpeechRecognition?: new () => any;
-      webkitSpeechRecognition?: new () => any;
+      SpeechRecognition?: SpeechRecognitionCtor;
+      webkitSpeechRecognition?: SpeechRecognitionCtor;
     };
     const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
     if (!SR) return;
+
+    baseDraftRef.current = draft ? `${draft} ` : "";
+    finalizedRef.current = "";
+
     const recognition = new SR();
     recognition.lang = "en-US";
-    recognition.interimResults = false;
-    recognition.onresult = (e: any) => {
-      const transcript = Array.from(e.results as any[])
-        .map((r) => r[0].transcript)
-        .join(" ");
-      setDraft((d) => (d ? `${d} ${transcript}` : transcript));
+    // continuous + interimResults is what makes this live: without them the
+    // browser only reports text after you stop talking, not as you speak.
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const result = e.results[i];
+        if (!result) continue;
+        const chunk = result[0].transcript;
+        if (result.isFinal) {
+          finalizedRef.current += (finalizedRef.current ? " " : "") + chunk.trim();
+        } else {
+          interim += chunk;
+        }
+      }
+      const finalized = finalizedRef.current;
+      setDraft(baseDraftRef.current + finalized + (finalized && interim ? " " : "") + interim);
     };
     recognition.onend = () => setListening(false);
     recognition.onerror = () => setListening(false);
@@ -261,11 +309,33 @@ function BrainPage() {
                 key={m.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                  m.role === "user" ? "ml-auto bg-white/12" : "bg-secondary text-muted-foreground"
-                }`}
+                className={m.role === "user" ? "ml-auto max-w-[85%]" : "max-w-[85%]"}
               >
-                {m.text}
+                <div
+                  className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                    m.role === "user" ? "bg-white/12" : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {m.text}
+                </div>
+                {m.trace?.length ? <AgentTracePanel steps={m.trace} /> : null}
+                {m.attachments?.map((a) => (
+                  <ChatAttachmentCard key={a.id} attachment={a} />
+                ))}
+                {m.question ? (
+                  <AgentQuestion
+                    question={m.question}
+                    answeredValues={m.answeredValues}
+                    disabled={thinking}
+                    onAnswer={(values) => {
+                      const label = m
+                        .question!.options.filter((o) => values.includes(o.value))
+                        .map((o) => o.label)
+                        .join(", ");
+                      answerQuestion(m.id, values, label);
+                    }}
+                  />
+                ) : null}
               </motion.div>
             ))}
             {thinking ? (
