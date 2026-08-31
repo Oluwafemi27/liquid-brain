@@ -11,8 +11,15 @@ import {
   Waves,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import { useAduf } from "@/store/aduf-store";
+import { useAuth } from "@/store/auth-store";
 import { LiquidBackground } from "./liquid";
+import { AuthBootstrap } from "./auth-bootstrap";
+import { GoalsBootstrap } from "./goals-bootstrap";
+import { SignInGate } from "./sign-in-gate";
+import { SignInModal } from "./sign-in-modal";
+import { SurveyModal } from "./survey-modal";
 
 const nav = [
   { to: "/", label: "Brain", icon: Brain },
@@ -32,22 +39,44 @@ function initials(name: string) {
   return trimmed ? trimmed.slice(0, 2).toUpperCase() : "—";
 }
 
-/** Compact identity chip — used wherever we need a small header footprint with room for the username. */
+/** Compact identity chip — used wherever we need a small header footprint
+ *  with room for the username. Doubles as the sign-in/sign-out control:
+ *  tapping it opens Google sign-in when signed out, or signs out when
+ *  signed in. */
 function UserChip({ className }: { className?: string }) {
   const { userName } = useAduf();
+  const { status, user, openSignIn, signOut } = useAuth();
+  const displayName = status === "signed-in" ? user?.name || userName : userName;
+
   return (
-    <div className={`flex min-w-0 items-center gap-2 ${className ?? ""}`}>
-      <div
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-background"
-        style={{ background: "var(--gradient-accent)" }}
-      >
-        {initials(userName)}
-      </div>
+    <button
+      type="button"
+      onClick={() => (status === "signed-in" ? void signOut() : openSignIn())}
+      title={status === "signed-in" ? "Sign out" : "Sign in with Google"}
+      className={`flex min-w-0 items-center gap-2 text-left ${className ?? ""}`}
+    >
+      {status === "signed-in" && user?.avatarUrl ? (
+        <img
+          src={user.avatarUrl}
+          alt=""
+          className="h-8 w-8 shrink-0 rounded-full object-cover"
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        <div
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-background"
+          style={{ background: "var(--gradient-accent)" }}
+        >
+          {initials(displayName)}
+        </div>
+      )}
       <div className="min-w-0 leading-tight">
-        <p className="truncate text-xs font-medium">{userName || "Add your name"}</p>
-        <p className="truncate text-[10px] text-muted-foreground">Owner</p>
+        <p className="truncate text-xs font-medium">{displayName || "Add your name"}</p>
+        <p className="truncate text-[10px] text-muted-foreground">
+          {status === "signed-in" ? "Signed in" : "Sign in"}
+        </p>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -73,13 +102,40 @@ function NotificationBell({ className }: { className?: string }) {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { sources, memoryNodes, insights } = useAduf();
+  const { sources, memoryNodes, insights, userName, setUserName } = useAduf();
+  const { status, user } = useAuth();
   const connectedCount = sources.filter((s) => s.connected).length;
   const totalFacts = memoryNodes.reduce((sum, n) => sum + n.facts, 0);
   const unread = insights.filter((i) => !i.read).length;
 
+  // Adopt the Google account's name as the dashboard's display name the
+  // first time someone signs in, without clobbering a name they've since
+  // customised in Settings.
+  useEffect(() => {
+    if (status === "signed-in" && user?.name && !userName) {
+      setUserName(user.name);
+    }
+  }, [status, user, userName, setUserName]);
+
+  // Gate the entire app behind Google sign-in. AuthBootstrap still has to
+  // mount so the session listener runs and can flip `status` to
+  // "signed-in" once a session is found (or restored after redirect).
+  if (status !== "signed-in") {
+    return (
+      <div className="min-h-screen">
+        <AuthBootstrap />
+        <LiquidBackground />
+        <SignInGate loading={status === "loading"} />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen">
+      <AuthBootstrap />
+      <GoalsBootstrap />
+      <SignInModal />
+      <SurveyModal />
       <LiquidBackground />
 
       <aside className="glass fixed left-4 top-4 bottom-4 z-30 hidden w-[236px] flex-col rounded-3xl p-4 lg:flex">
