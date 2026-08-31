@@ -104,6 +104,40 @@ export interface ChatMessage {
   /** Files the agent created while producing this reply — previewable and
    *  downloadable from the chat. */
   attachments?: ChatAttachment[];
+  /** Present when this reply is a structured ADUF business diagnosis. */
+  analysis?: AdufAnalysis;
+}
+
+export type AdufSeverity = "low" | "medium" | "high" | "critical";
+
+export type AdufArea =
+  | "visibility"
+  | "credibility"
+  | "customer_journey"
+  | "conversion"
+  | "sales"
+  | "retention"
+  | "operations"
+  | "local_presence"
+  | "search_ai_visibility";
+
+export interface AdufFinding {
+  area: AdufArea;
+  problem: string;
+  severity: AdufSeverity;
+  rootCauses: string[];
+  opportunities: string[];
+  recommendedActions: string[];
+  estimatedImpact: string;
+  automationPossible: boolean;
+  automationNotes?: string | undefined;
+  expertRequired: boolean;
+  expertType?: string | undefined;
+}
+
+export interface AdufAnalysis {
+  summary: string;
+  findings: AdufFinding[];
 }
 
 export type InsightSeverity = "info" | "success" | "warning";

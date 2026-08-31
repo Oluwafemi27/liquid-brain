@@ -5,7 +5,8 @@ import { HarnessExhaustedError, runWithHarness } from "@/lib/server/agent-harnes
 import { createDocument } from "@/lib/server/documents";
 import { resolveDefaultModelKey } from "@/lib/server/model-keys";
 import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "@/lib/server/supabase";
-import type { AgentTraceStep, ChatAttachment, ChatMessage } from "@/lib/aduf-types";
+import { getSurvey, surveyToContext, verifyAccessToken } from "@/lib/server/survey";
+import type { AdufAnalysis, AgentTraceStep, ChatAttachment, ChatMessage } from "@/lib/aduf-types";
 
 const chatMessageShape = z.object({
   id: z.string(),
@@ -20,6 +21,7 @@ const bodySchema = z.object({
   message: z.string().min(1).max(4000),
   history: z.array(chatMessageShape).optional(),
   sessionId: z.string().min(1).max(200).optional(),
+  accessToken: z.string().min(1).nullable().optional(),
 });
 
 function json(data: unknown, status = 200) {
@@ -38,6 +40,7 @@ async function logMessage(
     answeredValues?: string[];
     trace?: AgentTraceStep[];
     attachments?: ChatAttachment[] | undefined;
+    analysis?: AdufAnalysis | null;
   } = {},
 ) {
   const db = getSupabaseAdmin();
@@ -51,6 +54,7 @@ async function logMessage(
     answered_values: extra.answeredValues ?? null,
     trace: extra.trace ?? null,
     attachments: extra.attachments ?? null,
+    analysis: extra.analysis ?? null,
   });
   if (error) console.error("[api/chat] failed to persist message", error);
 }
@@ -103,7 +107,18 @@ export const Route = createFileRoute("/api/chat")({
         if (!parsed.success) {
           return json({ error: "Invalid request", details: parsed.error.flatten() }, 400);
         }
-        const { message, history = [], sessionId = "default" } = parsed.data;
+        const { message, history = [], sessionId = "default", accessToken } = parsed.data;
+
+        // Server-side backstop for the sign-in gate — the chat UI already
+        // refuses to call this endpoint while signed out, but that's only a
+        // client convenience. If a backend is configured (so identity can
+        // actually be checked), a request without a valid session is
+        // rejected here too, regardless of what the client claims.
+        const isBackendConfigured = Boolean(getSupabaseAdmin());
+        const authedUser = isBackendConfigured ? await verifyAccessToken(accessToken) : null;
+        if (isBackendConfigured && !authedUser) {
+          return json({ error: "sign_in_required" }, 401);
+        }
 
         // Fire-and-forget persistence — never block or fail the reply on this.
         void logMessage(sessionId, "user", message);
@@ -114,10 +129,15 @@ export const Route = createFileRoute("/api/chat")({
           return json({ reply: error.message, question: null, trace: [] });
         }
 
+        const surveyContext = authedUser
+          ? await getSurvey(authedUser.id).then((s) => (s ? surveyToContext(s) : undefined))
+          : undefined;
+
         try {
           const { result, trace } = await runWithHarness(
             "brain-chat-reply",
-            (repairContext) => callAgent(history as ChatMessage[], message, repairContext),
+            (repairContext) =>
+              callAgent(history as ChatMessage[], message, repairContext, surveyContext),
             { maxAttempts: 3 },
           );
           const attachments = await attachDocumentIfRequested(sessionId, result.document);
@@ -125,12 +145,14 @@ export const Route = createFileRoute("/api/chat")({
             question: result.question ?? null,
             trace,
             attachments,
+            analysis: result.analysis ?? null,
           });
           return json({
             reply: result.reply,
             question: result.question ?? null,
             trace,
             attachments,
+            analysis: result.analysis ?? null,
           });
         } catch (error) {
           if (error instanceof NoModelConfiguredError) {

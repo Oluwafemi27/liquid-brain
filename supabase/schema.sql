@@ -126,3 +126,69 @@ create table if not exists agent_skills (
 -- social-comment-reply, social-dm-reply, email-reply, shopify-ecommerce.
 -- See the Supabase dashboard (Table Editor > agent_skills) to view/edit the
 -- live prompts, or ask me to dump them back into this file.
+
+-- 006_chat_analysis: structured ADUF diagnosis (problems/severity/root
+-- causes/opportunities/recommended actions/estimated impact/automation
+-- possibilities/expert requirements) attached to a chat_messages row when a
+-- reply is a business audit rather than plain conversation. See
+-- src/lib/aduf-types.ts#AdufAnalysis and src/lib/server/agent.ts.
+alter table chat_messages add column if not exists analysis jsonb;
+
+-- 005_business_surveys: the short onboarding survey shown once, right after
+-- a user's first Google sign-in. One row per auth.users id. Read/written
+-- exclusively through the service-role client (src/lib/server/survey.ts)
+-- after verifying the caller's access token server-side, so RLS below is a
+-- defense-in-depth backstop, not the only guard.
+create table if not exists business_surveys (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  workspace_id text not null default 'default',
+  email text,
+  profession text not null,
+  website_url text,
+  goal text not null,
+  business_type text not null,
+  team_size text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table business_surveys enable row level security;
+
+create policy "Users can read their own survey"
+  on business_surveys for select
+  using (auth.uid() = user_id);
+
+create policy "Users can upsert their own survey"
+  on business_surveys for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own survey"
+  on business_surveys for update
+  using (auth.uid() = user_id);
+
+-- 007_goals: persistent goals + progress, replacing the old client-only
+-- Zustand-only state. Realtime-enabled so the Goals page updates live
+-- across tabs/sessions without a manual refetch.
+create table if not exists goals (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id text not null default 'default',
+  title text not null,
+  target numeric not null,
+  current numeric not null default 0,
+  currency text not null default '',
+  due text not null default 'Not set',
+  sub_tasks jsonb not null default '[]',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists goals_workspace_idx on goals (workspace_id, created_at);
+
+alter table goals enable row level security;
+
+-- Single-tenant for now (see DEFAULT_WORKSPACE_ID) — reads are open so the
+-- browser's anon-key client can subscribe to realtime changes; all writes
+-- go through server functions using the service-role client, which bypasses
+-- RLS entirely, so no insert/update/delete policy is needed yet.
+create policy "Public read (single-tenant)" on goals for select using (true);
+
+alter publication supabase_realtime add table goals;

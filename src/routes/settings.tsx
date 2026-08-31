@@ -62,7 +62,7 @@ function SettingsPage() {
           Object.fromEntries(Object.entries(statuses).map(([id, s]) => [id, s.configured])),
         );
         for (const [id, status] of Object.entries(statuses)) {
-          if (status.connected) setSourceConnected(id, true);
+          setSourceConnected(id, status.connected);
         }
       })
       .catch(() => {

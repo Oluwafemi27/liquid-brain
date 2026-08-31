@@ -21,6 +21,8 @@ import {
   initialInsights,
   initialScheduleEvents,
 } from "@/lib/initial-data";
+import { useAuth } from "@/store/auth-store";
+import { bumpGoalFn, createGoalFn, toggleGoalSubTaskFn } from "@/lib/server-fns";
 
 function makeSessionId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -59,6 +61,11 @@ interface AdufState {
   toggleSubTask: (goalId: string, taskId: string) => void;
   bumpGoal: (goalId: string, amount: number) => void;
   addGoal: (title: string, target: number) => void;
+  /** Replaces the whole goals list — used to hydrate from Supabase on load. */
+  setGoals: (goals: Goal[]) => void;
+  /** Inserts or replaces a single goal by id — used by the realtime subscription. */
+  upsertGoal: (goal: Goal) => void;
+  removeGoal: (goalId: string) => void;
   connectSource: (id: string) => void;
   setSourceConnected: (id: string, connected: boolean) => void;
   sendMessage: (text: string) => void;
@@ -73,28 +80,9 @@ interface AdufState {
   removeScheduleEvent: (id: string) => void;
 }
 
-const previewMemoryNodes: MemoryNode[] = [
-  { id: "aduf", label: "ADUF", group: "core", facts: 1248, x: 50, y: 50 },
-  { id: "customers", label: "Customers", group: "customers", facts: 486, x: 23, y: 28 },
-  { id: "repeat-buyers", label: "Repeat buyers", group: "customers", facts: 184, x: 17, y: 67 },
-  { id: "catalog", label: "Product catalog", group: "products", facts: 312, x: 72, y: 24 },
-  { id: "best-sellers", label: "Best sellers", group: "products", facts: 96, x: 84, y: 55 },
-  { id: "sales", label: "Sales", group: "revenue", facts: 228, x: 76, y: 75 },
-  { id: "checkout", label: "Checkout", group: "revenue", facts: 74, x: 45, y: 87 },
-  { id: "website", label: "Website traffic", group: "traffic", facts: 268, x: 25, y: 78 },
-];
-
-const previewMemoryEdges: MemoryEdge[] = [
-  { from: "aduf", to: "customers" },
-  { from: "aduf", to: "catalog" },
-  { from: "aduf", to: "sales" },
-  { from: "aduf", to: "website" },
-  { from: "customers", to: "repeat-buyers" },
-  { from: "catalog", to: "best-sellers" },
-  { from: "best-sellers", to: "sales" },
-  { from: "website", to: "checkout" },
-  { from: "checkout", to: "sales" },
-];
+// The Business Memory graph is built from real connected data sources —
+// there is no fabricated placeholder graph. A fresh/disconnected account
+// simply starts with an empty graph (see memoryNodes/memoryEdges below).
 
 function makeInsight(partial: Omit<Insight, "id" | "createdAt" | "read">): Insight {
   return {
@@ -114,12 +102,9 @@ export const useAduf = create<AdufState>((set, get) => ({
   funnel: [],
   goals: [],
   automations: initialAutomations,
-  memoryNodes: previewMemoryNodes,
-  memoryEdges: previewMemoryEdges,
-  sources: initialDataSources.map((source) => ({
-    ...source,
-    connected: ["shopify", "ga", "paystack"].includes(source.id),
-  })),
+  memoryNodes: [],
+  memoryEdges: [],
+  sources: initialDataSources,
   messages: [],
   thinking: false,
   sessionId: makeSessionId(),
@@ -146,64 +131,73 @@ export const useAduf = create<AdufState>((set, get) => ({
       return { automations, insights: [insight, ...s.insights] };
     }),
 
-  toggleSubTask: (goalId, taskId) =>
-    set((s) => ({
-      goals: s.goals.map((g) =>
-        g.id === goalId
-          ? {
-              ...g,
-              subTasks: g.subTasks.map((t) => (t.id === taskId ? { ...t, done: !t.done } : t)),
-            }
-          : g,
-      ),
-    })),
+  // Goals are persisted server-side (Supabase) — these actions fire the
+  // request and let the response (or the realtime subscription in
+  // GoalsBootstrap) update local state, rather than mutating optimistic
+  // local-only state that a reload would lose.
 
-  bumpGoal: (goalId, amount) =>
+  toggleSubTask: (goalId, taskId) => {
+    toggleGoalSubTaskFn({ data: { goalId, taskId } })
+      .then((goal) => {
+        if (goal) get().upsertGoal(goal);
+      })
+      .catch((err) => console.error("[goals] toggleSubTask failed", err));
+  },
+
+  bumpGoal: (goalId, amount) => {
+    const before = get().goals.find((g) => g.id === goalId);
+    bumpGoalFn({ data: { goalId, amount } })
+      .then((after) => {
+        if (!after) return;
+        get().upsertGoal(after);
+        if (before && before.current < before.target && after.current >= after.target) {
+          set((s) => ({
+            insights: [
+              makeInsight({
+                title: `Goal reached: ${after.title}`,
+                body: `You hit your target of ${after.currency}${after.target.toLocaleString()}. Nice work.`,
+                severity: "success",
+                source: "Goals",
+              }),
+              ...s.insights,
+            ],
+          }));
+        }
+      })
+      .catch((err) => console.error("[goals] bumpGoal failed", err));
+  },
+
+  addGoal: (title, target) => {
+    createGoalFn({ data: { title, target, currency: inferGoalCurrency(title) } })
+      .then((goal) => {
+        if (!goal) return;
+        get().upsertGoal(goal);
+        set((s) => ({
+          insights: [
+            makeInsight({
+              title: `New goal set: ${title}`,
+              body: `ADUF will track progress toward this goal and flag anything worth knowing here.`,
+              severity: "info",
+              source: "Goals",
+            }),
+            ...s.insights,
+          ],
+        }));
+      })
+      .catch((err) => console.error("[goals] addGoal failed", err));
+  },
+
+  setGoals: (goals) => set({ goals }),
+
+  upsertGoal: (goal) =>
     set((s) => {
-      const before = s.goals.find((g) => g.id === goalId);
-      const goals = s.goals.map((g) =>
-        g.id === goalId ? { ...g, current: Math.min(g.target, g.current + amount) } : g,
-      );
-      const after = goals.find((g) => g.id === goalId);
-      let insights = s.insights;
-      if (before && after && before.current < before.target && after.current >= after.target) {
-        insights = [
-          makeInsight({
-            title: `Goal reached: ${after.title}`,
-            body: `You hit your target of ${after.currency}${after.target.toLocaleString()}. Nice work.`,
-            severity: "success",
-            source: "Goals",
-          }),
-          ...s.insights,
-        ];
-      }
-      return { goals, insights };
+      const exists = s.goals.some((g) => g.id === goal.id);
+      return {
+        goals: exists ? s.goals.map((g) => (g.id === goal.id ? goal : g)) : [...s.goals, goal],
+      };
     }),
 
-  addGoal: (title, target) =>
-    set((s) => ({
-      goals: [
-        ...s.goals,
-        {
-          id: `goal-${Date.now()}`,
-          title,
-          target,
-          current: 0,
-          currency: inferGoalCurrency(title),
-          due: "Not set",
-          subTasks: [],
-        },
-      ],
-      insights: [
-        makeInsight({
-          title: `New goal set: ${title}`,
-          body: `ADUF will track progress toward this goal and flag anything worth knowing here.`,
-          severity: "info",
-          source: "Goals",
-        }),
-        ...s.insights,
-      ],
-    })),
+  removeGoal: (goalId) => set((s) => ({ goals: s.goals.filter((g) => g.id !== goalId) })),
 
   connectSource: (id) =>
     set((s) => {
@@ -230,24 +224,43 @@ export const useAduf = create<AdufState>((set, get) => ({
   sendMessage: (text) => {
     const trimmed = text.trim();
     if (!trimmed || get().thinking) return;
+
+    // Any attempt to prompt the AI — including the suggestion chips and
+    // "answer a question" replies, which both funnel through here — is
+    // gated on being signed in. requireAuth() opens the Google sign-in
+    // overlay itself when it isn't, so there's nothing else to do here.
+    if (!useAuth.getState().requireAuth()) return;
+
     const history = get().messages;
     set((s) => ({
       messages: [...s.messages, { id: `u-${Date.now()}`, role: "user", text: trimmed }],
       thinking: true,
     }));
 
+    const accessToken = useAuth.getState().accessToken;
+
     fetch("/api/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message: trimmed, history, sessionId: get().sessionId }),
+      body: JSON.stringify({
+        message: trimmed,
+        history,
+        sessionId: get().sessionId,
+        accessToken,
+      }),
     })
       .then(async (res) => {
+        if (res.status === 401) {
+          useAuth.getState().openSignIn();
+          throw new Error("sign_in_required");
+        }
         if (!res.ok) throw new Error(`chat request failed (${res.status})`);
         return (await res.json()) as {
           reply: string;
           question: ChatMessage["question"] | null;
           trace?: ChatMessage["trace"];
           attachments?: ChatMessage["attachments"];
+          analysis?: ChatMessage["analysis"] | null;
         };
       })
       .then((data) => {
@@ -261,12 +274,19 @@ export const useAduf = create<AdufState>((set, get) => ({
               ...(data.question ? { question: data.question } : {}),
               ...(data.trace?.length ? { trace: data.trace } : {}),
               ...(data.attachments?.length ? { attachments: data.attachments } : {}),
+              ...(data.analysis ? { analysis: data.analysis } : {}),
             },
           ],
           thinking: false,
         }));
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err instanceof Error && err.message === "sign_in_required") {
+          // Roll back the optimistic user turn — it never actually reached
+          // ADUF, and the sign-in modal is already open.
+          set((s) => ({ messages: s.messages.slice(0, -1), thinking: false }));
+          return;
+        }
         set((s) => ({
           messages: [
             ...s.messages,

@@ -8,6 +8,7 @@ import { InsightRow } from "@/components/aduf/insight-feed";
 import { AgentQuestion } from "@/components/aduf/agent-question";
 import { AgentTracePanel } from "@/components/aduf/agent-trace";
 import { ChatAttachmentCard } from "@/components/aduf/chat-attachment";
+import { AdufAnalysisCard } from "@/components/aduf/aduf-analysis-card";
 import { useAduf } from "@/store/aduf-store";
 import { cn } from "@/lib/utils";
 
@@ -319,6 +320,7 @@ function BrainPage() {
                   {m.text}
                 </div>
                 {m.trace?.length ? <AgentTracePanel steps={m.trace} /> : null}
+                {m.analysis ? <AdufAnalysisCard analysis={m.analysis} /> : null}
                 {m.attachments?.map((a) => (
                   <ChatAttachmentCard key={a.id} attachment={a} />
                 ))}
