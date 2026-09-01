@@ -112,13 +112,13 @@ function SettingsPage() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-[1500px] px-3 py-4 sm:px-6 sm:py-6 lg:py-8">
+      <div className="mx-auto w-full max-w-md px-4 pt-4 pb-24 lg:max-w-[1500px] lg:px-6 lg:py-8">
         <PageHeader eyebrow="Settings" title="You & your stack" />
 
         {banner ? (
           <GlassCard
             hover={false}
-            className={`mb-4 py-3 text-sm ${banner.kind === "success" ? "text-cyan" : "text-amber-400"}`}
+            className={`mb-4 min-h-16 rounded-2xl p-4 text-sm ${banner.kind === "success" ? "text-cyan" : "text-amber-400"}`}
           >
             {banner.text}
           </GlassCard>
@@ -126,7 +126,7 @@ function SettingsPage() {
 
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
           <div className="space-y-4">
-            <GlassCard hover={false} className="p-4 text-center sm:p-5">
+            <GlassCard hover={false} className="min-h-16 rounded-2xl p-4 text-center sm:p-5">
               <div
                 className="mx-auto grid h-12 w-12 place-items-center rounded-full sm:h-16 sm:w-16"
                 style={{ background: "var(--gradient-accent)" }}
@@ -147,14 +147,16 @@ function SettingsPage() {
               { icon: Bell, label: "Alerts", value: "Not set" },
               { icon: BadgeCheck, label: "Plan", value: "Free" },
             ].map(({ icon: Icon, label, value }, i) => (
-              <GlassCard key={label} delay={i * 0.05} className="flex items-center gap-3 p-4">
+              <GlassCard
+                key={label}
+                delay={i * 0.05}
+                className="flex min-h-16 items-center gap-3 rounded-2xl p-4"
+              >
                 <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10">
                   <Icon className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                    {label}
-                  </p>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
                   <p className="truncate text-sm">{value}</p>
                 </div>
               </GlassCard>
@@ -168,7 +170,11 @@ function SettingsPage() {
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {sources.map((s, i) => (
-                  <GlassCard key={s.id} delay={i * 0.05} className="relative">
+                  <GlassCard
+                    key={s.id}
+                    delay={i * 0.05}
+                    className="relative min-h-16 rounded-2xl p-4"
+                  >
                     <AnimatePresence>
                       {pouring === s.id ? (
                         <motion.div
@@ -181,8 +187,8 @@ function SettingsPage() {
                       ) : null}
                     </AnimatePresence>
                     <div className="relative">
-                      <p className="font-display text-base font-semibold">{s.name}</p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">{s.category}</p>
+                      <p className="text-xl font-semibold">{s.name}</p>
+                      <p className="mt-0.5 text-sm text-gray-400">{s.category}</p>
                       <button
                         onClick={() => !s.connected && connect(s.id)}
                         disabled={s.connected || pouring === s.id}

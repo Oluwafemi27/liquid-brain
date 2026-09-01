@@ -202,7 +202,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <header className="glass fixed inset-x-3 top-3 z-30 flex items-center justify-between gap-3 rounded-2xl px-3 py-2 lg:hidden">
+      <header className="glass fixed inset-x-0 top-0 z-30 flex items-center justify-between gap-3 rounded-none px-4 pb-2 pt-[env(safe-area-inset-top)] lg:hidden">
         <div className="flex min-w-0 items-center gap-2">
           <div
             className="grid h-7 w-7 shrink-0 place-items-center rounded-lg"
@@ -222,7 +222,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {children}
       </main>
 
-      <nav className="glass fixed inset-x-3 bottom-3 z-40 grid grid-cols-6 rounded-3xl p-1.5 lg:hidden">
+      <nav className="glass fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 rounded-none px-2 pt-1.5 pb-[env(safe-area-inset-bottom)] lg:hidden">
         {mobileNav.map(({ to, label, icon: Icon }) => (
           <Link
             key={to}
@@ -231,7 +231,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="flex flex-col items-center gap-1 rounded-2xl py-2 text-[10px] text-muted-foreground transition-colors"
             activeProps={{ className: "bg-white/12 text-foreground" }}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-6 w-6" />
             <span className="truncate">{label}</span>
           </Link>
         ))}
