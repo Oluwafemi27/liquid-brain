@@ -43,7 +43,11 @@ export async function listGoals(): Promise<Goal[]> {
   return (data ?? []).map(fromRow);
 }
 
-export async function createGoal(title: string, target: number, currency: string): Promise<Goal | null> {
+export async function createGoal(
+  title: string,
+  target: number,
+  currency: string,
+): Promise<Goal | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
 

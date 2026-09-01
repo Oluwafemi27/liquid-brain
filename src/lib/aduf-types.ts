@@ -91,6 +91,31 @@ export interface ChatAttachment {
   previewText?: string | null;
 }
 
+/** A goal the agent drafted for the owner to review — nothing is created
+ *  until the owner taps Approve, at which point the app calls the same
+ *  addGoal() path the manual "New Goal" form uses, so it lands on the
+ *  Goals page (and Supabase) exactly like a hand-created goal would. */
+export interface ProposedGoalAction {
+  type: "create_goal";
+  title: string;
+  target: number;
+  currency: string;
+  reasoning: string;
+}
+
+/** A channel automation the agent wants turned on/off — approving it calls
+ *  the same toggleAutomation() the Automation Grid's own toggle uses. */
+export interface ProposedAutomationAction {
+  type: "toggle_automation";
+  channelId: ChannelId;
+  enabled: boolean;
+  reasoning: string;
+}
+
+export type ProposedAction = ProposedGoalAction | ProposedAutomationAction;
+
+export type ProposedActionStatus = "pending" | "approved" | "dismissed";
+
 export interface ChatMessage {
   id: string;
   role: "user" | "aduf";
@@ -106,6 +131,11 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   /** Present when this reply is a structured ADUF business diagnosis. */
   analysis?: AdufAnalysis;
+  /** Present when the agent is proposing a concrete change to another page
+   *  (a goal to create, an automation to flip) that needs the owner's
+   *  explicit approval before it takes effect anywhere. */
+  proposedAction?: ProposedAction;
+  proposedActionStatus?: ProposedActionStatus;
 }
 
 export type AdufSeverity = "low" | "medium" | "high" | "critical";

@@ -75,6 +75,11 @@ interface AdufState {
   markInsightRead: (id: string) => void;
   markAllInsightsRead: () => void;
   dismissInsight: (id: string) => void;
+  /** Executes a pending proposedAction (creates the goal / flips the
+   *  automation) through the exact same paths the Goals and Automation
+   *  Grid pages use themselves, then marks the chat message approved. */
+  approveProposedAction: (messageId: string) => void;
+  dismissProposedAction: (messageId: string) => void;
   addScheduleEvent: (event: Omit<ScheduleEvent, "id" | "done">) => void;
   toggleScheduleEventDone: (id: string) => void;
   removeScheduleEvent: (id: string) => void;
@@ -261,6 +266,7 @@ export const useAduf = create<AdufState>((set, get) => ({
           trace?: ChatMessage["trace"];
           attachments?: ChatMessage["attachments"];
           analysis?: ChatMessage["analysis"] | null;
+          proposedAction?: ChatMessage["proposedAction"] | null;
         };
       })
       .then((data) => {
@@ -275,6 +281,9 @@ export const useAduf = create<AdufState>((set, get) => ({
               ...(data.trace?.length ? { trace: data.trace } : {}),
               ...(data.attachments?.length ? { attachments: data.attachments } : {}),
               ...(data.analysis ? { analysis: data.analysis } : {}),
+              ...(data.proposedAction
+                ? { proposedAction: data.proposedAction, proposedActionStatus: "pending" as const }
+                : {}),
             },
           ],
           thinking: false,
@@ -317,6 +326,37 @@ export const useAduf = create<AdufState>((set, get) => ({
     set((s) => ({ insights: s.insights.map((i) => ({ ...i, read: true })) })),
 
   dismissInsight: (id) => set((s) => ({ insights: s.insights.filter((i) => i.id !== id) })),
+
+  approveProposedAction: (messageId) => {
+    const message = get().messages.find((m) => m.id === messageId);
+    const action = message?.proposedAction;
+    if (!action || message?.proposedActionStatus !== "pending") return;
+
+    set((s) => ({
+      messages: s.messages.map((m) =>
+        m.id === messageId ? { ...m, proposedActionStatus: "approved" as const } : m,
+      ),
+    }));
+
+    if (action.type === "create_goal") {
+      // Same call the "New Goal" form makes — persists to Supabase and the
+      // Goals page picks it up via the realtime subscription in
+      // GoalsBootstrap, with no extra plumbing needed here.
+      get().addGoal(action.title, action.target);
+    } else if (action.type === "toggle_automation") {
+      const current = get().automations.find((a) => a.id === action.channelId);
+      if (current && current.enabled !== action.enabled) {
+        get().toggleAutomation(action.channelId);
+      }
+    }
+  },
+
+  dismissProposedAction: (messageId) =>
+    set((s) => ({
+      messages: s.messages.map((m) =>
+        m.id === messageId ? { ...m, proposedActionStatus: "dismissed" as const } : m,
+      ),
+    })),
 
   addScheduleEvent: (event) =>
     set((s) => ({

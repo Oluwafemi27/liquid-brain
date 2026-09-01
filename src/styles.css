@@ -89,6 +89,7 @@
 
   html {
     color-scheme: dark;
+    overflow-x: hidden;
   }
 
   body {
@@ -96,6 +97,10 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    /* Safety net so a stray fixed-width child (a chart, a wide row) never
+       forces the whole app into horizontal scroll on narrow phones —
+       everything should already fit without this, but it's a cheap guard. */
   }
 
   h1,

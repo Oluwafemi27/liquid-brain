@@ -6,6 +6,7 @@ import { AppShell } from "@/components/aduf/app-shell";
 import { GlassCard, ProgressRing } from "@/components/aduf/liquid";
 import { InsightRow } from "@/components/aduf/insight-feed";
 import { AgentQuestion } from "@/components/aduf/agent-question";
+import { AgentProposedAction } from "@/components/aduf/agent-proposed-action";
 import { AgentTracePanel } from "@/components/aduf/agent-trace";
 import { ChatAttachmentCard } from "@/components/aduf/chat-attachment";
 import { AdufAnalysisCard } from "@/components/aduf/aduf-analysis-card";
@@ -173,7 +174,15 @@ function InsightFeedCard() {
 }
 
 function BrainPage() {
-  const { userName, messages, thinking, sendMessage, answerQuestion } = useAduf();
+  const {
+    userName,
+    messages,
+    thinking,
+    sendMessage,
+    answerQuestion,
+    approveProposedAction,
+    dismissProposedAction,
+  } = useAduf();
   const [draft, setDraft] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [listening, setListening] = useState(false);
@@ -336,6 +345,14 @@ function BrainPage() {
                         .join(", ");
                       answerQuestion(m.id, values, label);
                     }}
+                  />
+                ) : null}
+                {m.proposedAction ? (
+                  <AgentProposedAction
+                    action={m.proposedAction}
+                    status={m.proposedActionStatus}
+                    onApprove={() => approveProposedAction(m.id)}
+                    onDismiss={() => dismissProposedAction(m.id)}
                   />
                 ) : null}
               </motion.div>

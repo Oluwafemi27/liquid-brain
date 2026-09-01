@@ -131,7 +131,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen overflow-x-hidden">
       <AuthBootstrap />
       <GoalsBootstrap />
       <SignInModal />
@@ -216,7 +216,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="pb-24 pt-16 lg:pb-8 lg:pt-0 lg:pl-[268px]">{children}</main>
+      <main className="min-w-0 overflow-x-hidden pb-24 pt-16 lg:pb-8 lg:pt-0 lg:pl-[268px]">
+        {children}
+      </main>
 
       <nav className="glass fixed inset-x-3 bottom-3 z-40 grid grid-cols-6 rounded-3xl p-1.5 lg:hidden">
         {mobileNav.map(({ to, label, icon: Icon }) => (

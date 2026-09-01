@@ -16,6 +16,7 @@ const bodySchema = z.object({
    *  useful to show the owner the plan and let them approve it first.
    *  "run" plans and immediately executes every step via sub-agents. */
   mode: z.enum(["plan", "run"]).default("run"),
+  sessionId: z.string().min(1).max(200).optional(),
 });
 
 export const Route = createFileRoute("/api/tasks/run")({
@@ -37,7 +38,7 @@ export const Route = createFileRoute("/api/tasks/run")({
             const { plan, trace } = await buildPlan(parsed.data.goal);
             return json({ plan, trace });
           }
-          const result = await runTask(parsed.data.goal);
+          const result = await runTask(parsed.data.goal, parsed.data.sessionId);
           return json(result);
         } catch (error) {
           if (error instanceof NoModelConfiguredError) {

@@ -5,6 +5,7 @@ import { resolveDefaultModelKey } from "./model-keys";
 import { MODEL_PROVIDERS, callProviderChat } from "./model-providers";
 import { buildSkillsBlock, listSkills } from "./skills";
 import { NoModelConfiguredError } from "./agent";
+import { isSandboxConfigured, runInSandbox } from "./sandbox";
 import type { AgentTraceStep } from "@/lib/aduf-types";
 
 const planStepSchema = z.object({
@@ -15,6 +16,11 @@ const planStepSchema = z.object({
   successProbability: z.number().min(0).max(100),
   mitigation: z.string().min(1),
   dependsOn: z.array(z.string()).default([]),
+  /** True when this step genuinely needs code to actually run (real
+   *  computation, data transformation, testing a script) rather than just
+   *  writing/describing something — the planner sets this deliberately,
+   *  not for every step. */
+  needsCodeExecution: z.boolean().default(false),
 });
 
 const planSchema = z.object({
@@ -36,13 +42,17 @@ For every step, weigh risk and probability honestly:
 - "mitigation": a concrete way to reduce the risk or recover if it fails — never "monitor closely"
   with nothing else; give an actual fallback action
 - "dependsOn": ids of steps that must complete first (empty array if none)
+- "needsCodeExecution": true only when this step requires code to actually
+  run to be done correctly — a real calculation, parsing/transforming data,
+  testing a script's output — not for steps that are writing, drafting, or
+  reasoning in prose. Most steps are false.
 
 Break the goal into 2-8 steps. Each step should be independently actionable — something a
 sub-agent could execute with just its own title/detail, without needing the other steps'
 output, unless dependsOn says otherwise.
 
 Respond with ONLY a single JSON object, no markdown fences, no prose outside it:
-{"summary": string, "steps": [{"id": string, "title": string, "detail": string, "risk": "low"|"medium"|"high", "successProbability": number, "mitigation": string, "dependsOn": string[]}]}`;
+{"summary": string, "steps": [{"id": string, "title": string, "detail": string, "risk": "low"|"medium"|"high", "successProbability": number, "mitigation": string, "dependsOn": string[], "needsCodeExecution": boolean}]}`;
 
 /** Builds a risk/probability-weighted execution plan for a goal. Uses the
  *  harness with extra attempts (this is the "very strong harness" the plan
@@ -91,6 +101,39 @@ export interface SubAgentResult {
   trace: AgentTraceStep[];
 }
 
+/** For a step the planner flagged needsCodeExecution: asks the model for a
+ *  single Python snippet, actually runs it in an E2B sandbox, and returns
+ *  the code plus its real stdout/stderr — so the sub-agent's final answer
+ *  is grounded in something that really executed, not a guessed result. */
+async function runCodeStep(
+  step: PlanStep,
+  systemSkills: string,
+  provider: (typeof MODEL_PROVIDERS)[string],
+  apiKey: string,
+  sessionId: string,
+): Promise<string> {
+  const { text } = await callProviderChat(provider, apiKey, {
+    system:
+      `Write a single, self-contained Python script that accomplishes this step: "${step.title}" — ` +
+      `${step.detail}\n\nPrint whatever result the step needs — the script's stdout is the only ` +
+      `thing that will be captured. Respond with ONLY the code in a \`\`\`python fenced block, ` +
+      `nothing else.` +
+      systemSkills,
+    messages: [{ role: "user", content: step.detail }],
+  });
+  const match = text.match(/```(?:python)?\s*([\s\S]*?)```/);
+  const code = (match?.[1] ?? text).trim();
+  if (!code) throw new Error("Sub-agent didn't produce runnable code for this step.");
+
+  const run = await runInSandbox(code, { language: "python", sessionId });
+  if (!run.ok) {
+    throw new Error(
+      `Code ran but failed: ${run.error ?? (run.stderr.slice(0, 300) || "unknown error")}`,
+    );
+  }
+  return `\`\`\`python\n${code}\n\`\`\`\n\nOutput:\n\`\`\`\n${run.stdout || "(no output)"}\n\`\`\``;
+}
+
 /** Runs one plan step as an independent sub-agent call — its own harness,
  *  its own trace, failure in one step never aborts the others. */
 async function runSubAgent(
@@ -99,7 +142,20 @@ async function runSubAgent(
   systemSkills: string,
   provider: (typeof MODEL_PROVIDERS)[string],
   apiKey: string,
+  sessionId: string,
 ): Promise<SubAgentResult> {
+  if (step.needsCodeExecution && !isSandboxConfigured()) {
+    return {
+      stepId: step.id,
+      title: step.title,
+      status: "failed",
+      output:
+        "This step needs code execution, but no sandbox is configured yet — set E2B_API_KEY on the server (see .env.example).",
+      attempts: 0,
+      trace: [],
+    };
+  }
+
   const system =
     `You are a focused sub-agent executing exactly one step of a larger plan. ` +
     `Overall goal: ${goal}\n\nYour step: "${step.title}" — ${step.detail}\n\n` +
@@ -111,6 +167,9 @@ async function runSubAgent(
     const { result, trace, attempts } = await runWithHarness(
       `subagent-${step.id}`,
       async () => {
+        if (step.needsCodeExecution) {
+          return await runCodeStep(step, systemSkills, provider, apiKey, sessionId);
+        }
         const { text } = await callProviderChat(provider, apiKey, {
           system,
           messages: [{ role: "user", content: step.detail }],
@@ -154,7 +213,7 @@ export interface TaskRunResult {
  *  synthesize the sub-agent outputs into one coherent result. Every model
  *  call in this pipeline — plan, each sub-agent, synthesis — runs under the
  *  self-healing harness independently. */
-export async function runTask(goal: string): Promise<TaskRunResult> {
+export async function runTask(goal: string, sessionId = "default"): Promise<TaskRunResult> {
   const key = await resolveDefaultModelKey();
   if (!key) throw new NoModelConfiguredError();
   const provider = MODEL_PROVIDERS[key.providerId];
@@ -167,7 +226,7 @@ export async function runTask(goal: string): Promise<TaskRunResult> {
   // Concurrent sub-agents — this is the "split into multiple sub-agents"
   // primitive: independent steps run in parallel, not one at a time.
   const results = await Promise.all(
-    plan.steps.map((step) => runSubAgent(goal, step, skillsBlock, provider, key.apiKey)),
+    plan.steps.map((step) => runSubAgent(goal, step, skillsBlock, provider, key.apiKey, sessionId)),
   );
 
   const synthesisPrompt =

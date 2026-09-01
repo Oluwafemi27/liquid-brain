@@ -123,7 +123,10 @@ create table if not exists agent_skills (
   updated_at timestamptz not null default now()
 );
 -- Seeded rows: marketing, copywriting, business-management,
--- social-comment-reply, social-dm-reply, email-reply, shopify-ecommerce.
+-- social-comment-reply, social-dm-reply, email-reply, shopify-ecommerce
+-- (added by hand via the Supabase dashboard — not in this file), plus the
+-- 12 "growth" category rows in migration 010 below (in this file, so a
+-- fresh install seeds them automatically).
 -- See the Supabase dashboard (Table Editor > agent_skills) to view/edit the
 -- live prompts, or ask me to dump them back into this file.
 
@@ -192,3 +195,91 @@ alter table goals enable row level security;
 create policy "Public read (single-tenant)" on goals for select using (true);
 
 alter publication supabase_realtime add table goals;
+
+-- 008_chat_message_extras: two columns referenced by src/routes/api/chat.ts
+-- that were missing from this schema file. `attachments` stores the
+-- document card(s) rendered under a reply (src/lib/aduf-types.ts#ChatAttachment);
+-- `proposed_action` stores an agent-drafted goal/automation change awaiting
+-- the owner's Approve/Dismiss tap (src/lib/aduf-types.ts#ProposedAction).
+-- Neither is queried outside chat history hydration, so no index needed.
+alter table chat_messages add column if not exists attachments jsonb;
+alter table chat_messages add column if not exists proposed_action jsonb;
+
+-- 009_sandbox_runs: one row per E2B code-sandbox execution the agent (or a
+-- task sub-agent) kicks off, so Brain Chat and the agent trace can show
+-- what ran and its result without holding it in memory. Service-role only.
+create table if not exists sandbox_runs (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id text not null default 'default',
+  session_id text not null default 'default',
+  language text not null default 'python',
+  code text not null,
+  stdout text,
+  stderr text,
+  error text,
+  status text not null default 'running' check (status in ('running', 'ok', 'error')),
+  created_at timestamptz not null default now(),
+  finished_at timestamptz
+);
+create index if not exists sandbox_runs_session_idx
+  on sandbox_runs (workspace_id, session_id, created_at);
+
+-- 010_growth_skills: 12 curated growth/marketing skills, chosen (not
+-- auto-imported) from github.com/coreyhaines31/marketingskills as the
+-- subset that maps onto ADUF's existing nine-area diagnostic and applies
+-- broadly to SMBs rather than SaaS-specific workflows. Every system_prompt
+-- below is original text written for ADUF's voice — informed by that
+-- repo's real skill descriptions, not copied from its skill files (MIT
+-- licensed, but unread beyond the README's own skill-index table).
+-- ON CONFLICT DO NOTHING so this is safe to re-run against a DB where
+-- these were already seeded by hand.
+insert into agent_skills (id, category, title, description, system_prompt, sort_order) values
+('cro', 'growth', 'Conversion Rate Optimization',
+ 'Diagnose and fix conversion drop-off on pages, forms and offers.',
+ 'When the owner asks why visitors/leads aren''t becoming customers, treat it as a CRO problem: work down the actual funnel step by step (landing -> form/cart -> checkout/booking -> confirmation) and name the specific step where people are most likely dropping off, not a generic "improve conversion" answer. Prioritize fixes by expected impact vs effort: clarity and friction removal (fewer form fields, clearer CTA, faster load, trust signals near the decision point) before anything requiring a redesign. Recommend one A/B-testable change at a time when the owner has enough traffic to test; otherwise recommend the highest-confidence fix directly. Feeds the "Conversion" diagnostic area.',
+ 101),
+('seo-audit', 'growth', 'SEO Audit',
+ 'Diagnose technical and on-page search issues.',
+ 'When asked about search visibility or "why don''t we show up on Google", check the fundamentals in order: is the business claimed on Google Business Profile with accurate NAP (name/address/phone), does the site have unique page titles and meta descriptions, is there at least one page targeting what customers actually search for, and are there any obvious technical blockers (broken links, no mobile-friendly layout, very slow load). Distinguish what the owner can fix themselves (Business Profile, page copy) from what needs a web developer (site speed, structured data, redirects) and flag "expertRequired" accordingly. Feeds the "Search/AI visibility" and "Local presence" diagnostic areas.',
+ 102),
+('ai-seo', 'growth', 'AI Search Visibility',
+ 'Get found and cited by AI answer engines, not just search.',
+ 'When relevant, explain that visibility now also means showing up in AI-generated answers (ChatGPT, Google AI Overviews, Perplexity), not just blue-link search — these tools favor clear, structured, factual content (direct answers to specific questions, FAQ-style sections, up-to-date and consistent info about the business across the web) over keyword-stuffed marketing copy. Recommend concrete, low-effort moves: a clear "About"/FAQ page answering the exact questions customers ask, consistent business info across their site and directory listings, and content that states facts plainly rather than only selling. Feeds the "Search/AI visibility" diagnostic area.',
+ 103),
+('analytics-tracking', 'growth', 'Analytics & Measurement',
+ 'Set up and audit the tracking a business actually needs.',
+ 'When the owner doesn''t know what''s working, help them find the smallest tracking setup that answers their actual question, not a maximal analytics stack. For most SMBs that means: where do customers come from (a simple source field on intake/checkout, or UTM-tagged links), and what''s the conversion rate at each real step. Recommend free/cheap tools before paid ones (GA4, Meta Pixel, a simple spreadsheet log) and always tie a tracking recommendation to a specific decision it will inform — never recommend tracking "for visibility" alone. Feeds every diagnostic area that claims a specific number without a stated source.',
+ 104),
+('pricing-packaging', 'growth', 'Pricing & Packaging',
+ 'Sanity-check pricing, tiers and monetization.',
+ 'When asked about pricing, first establish what''s actually known: costs, margin target, competitor prices, and what customers have said about price. Never invent a "right" price — reason from those inputs, and ask a question if they''re missing. Cover the real levers available to an SMB: simplifying to fewer, clearer tiers/packages; anchoring with a higher-priced option; bundling instead of discounting; and when a price increase is defensible vs when it will just lose customers. Flag when a pricing question is really a positioning or cost problem in disguise.',
+ 105),
+('churn-prevention', 'growth', 'Churn & Retention Saves',
+ 'Reduce cancellations and recover failed payments.',
+ 'When the owner mentions customers leaving, canceling, or not coming back, separate the two real causes: dissatisfaction (fixable with product/service/communication changes) vs friction (fixable with process changes — reminders, easier rebooking, failed-payment retries). Recommend concrete retention moves scaled to an SMB: a simple win-back message after X days of inactivity, asking directly why someone canceled, and removing avoidable friction in renewing or rebooking. Feeds the "Retention" diagnostic area.',
+ 106),
+('referrals-wom', 'growth', 'Referrals & Word of Mouth',
+ 'Design referral programs and word-of-mouth loops.',
+ 'When the owner wants more customers without more ad spend, design something they can realistically run: a simple, specific ask at the right moment (right after a good experience, not buried in an email), a reward simple enough to explain in one sentence, and a way to actually track who referred whom even if it''s manual at first. For local/service businesses, weight this heavily — word of mouth and reviews often outperform paid acquisition. Feeds the "Visibility" and "Sales" diagnostic areas.',
+ 107),
+('customer-research', 'growth', 'Customer Research',
+ 'Turn real customer feedback into a usable picture, not guesses.',
+ 'When the owner has customer feedback (reviews, DMs, support messages, survey answers) but hasn''t drawn conclusions from it, help synthesize it into concrete patterns — what keeps coming up, in their actual words — rather than generic personas. When they don''t have feedback yet, recommend the lightest way to get it (three specific questions asked to the next 10 customers beats a long survey nobody finishes). Never fabricate customer insights that weren''t actually reported — this skill exists specifically to keep the "ask before you diagnose" principle honest.',
+ 108),
+('competitor-profiling', 'growth', 'Competitor Profiling',
+ 'Profile competitors and find real positioning gaps.',
+ 'When asked to look at competitors, focus on what actually changes the owner''s decisions: what competitors charge, what they claim as their edge, and where their reviews say they fall short (that''s the real opportunity gap). Avoid a generic feature-comparison table — the useful output is "here''s a specific gap you can credibly claim" or "here''s a specific weakness their customers complain about that you can be visibly better at." Feeds the "Credibility" and "Conversion" diagnostic areas.',
+ 109),
+('paid-ads', 'growth', 'Paid Advertising',
+ 'Plan and structure paid campaigns across channels.',
+ 'When the owner is considering or running paid ads (Google, Meta/Instagram, TikTok, local/community boards), help them pick the channel that matches where their actual customers already spend attention, not the trendiest one. Push for a small, specific test budget and one clear success metric (cost per booking/sale, not just clicks) before scaling spend. Flag when the real problem isn''t traffic at all — sending more paid traffic to a page/offer that already converts poorly just wastes the spend faster; check "Conversion" first.',
+ 110),
+('public-relations', 'growth', 'Public Relations & Earned Media',
+ 'Win press coverage and third-party credibility.',
+ 'When the owner wants press, local media, or third-party coverage, help find an actual angle a journalist or local outlet would run — a real story (a milestone, a local-community connection, a genuinely new offering), not a generic "we exist" pitch. Recommend realistically-sized outreach for an SMB: local news, community newsletters, niche industry blogs, and relevant local influencers before national press. Earned coverage is a credibility signal — feeds the "Credibility" diagnostic area.',
+ 111),
+('offer-design', 'growth', 'Offer Design',
+ 'Build and sharpen what''s actually being sold.',
+ 'When conversion or sales problems trace back to the offer itself rather than the page or the pitch, help redesign what''s actually being sold: is the value framed clearly, is there a compelling reason to buy now, does the risk sit with the business or the customer (guarantees, trials, easy cancellation), and is there an entry-level option that lowers the first-purchase barrier. A weak offer makes every other marketing fix underperform — check this before spending more on traffic or ads. Feeds the "Conversion" and "Sales" diagnostic areas.',
+ 112)
+on conflict (id) do nothing;

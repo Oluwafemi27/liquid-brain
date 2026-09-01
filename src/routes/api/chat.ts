@@ -6,7 +6,13 @@ import { createDocument } from "@/lib/server/documents";
 import { resolveDefaultModelKey } from "@/lib/server/model-keys";
 import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "@/lib/server/supabase";
 import { getSurvey, surveyToContext, verifyAccessToken } from "@/lib/server/survey";
-import type { AdufAnalysis, AgentTraceStep, ChatAttachment, ChatMessage } from "@/lib/aduf-types";
+import type {
+  AdufAnalysis,
+  AgentTraceStep,
+  ChatAttachment,
+  ChatMessage,
+  ProposedAction,
+} from "@/lib/aduf-types";
 
 const chatMessageShape = z.object({
   id: z.string(),
@@ -41,6 +47,7 @@ async function logMessage(
     trace?: AgentTraceStep[];
     attachments?: ChatAttachment[] | undefined;
     analysis?: AdufAnalysis | null;
+    proposedAction?: ProposedAction | null;
   } = {},
 ) {
   const db = getSupabaseAdmin();
@@ -55,6 +62,7 @@ async function logMessage(
     trace: extra.trace ?? null,
     attachments: extra.attachments ?? null,
     analysis: extra.analysis ?? null,
+    proposed_action: extra.proposedAction ?? null,
   });
   if (error) console.error("[api/chat] failed to persist message", error);
 }
@@ -140,19 +148,26 @@ export const Route = createFileRoute("/api/chat")({
               callAgent(history as ChatMessage[], message, repairContext, surveyContext),
             { maxAttempts: 3 },
           );
+          // The outer harness's trace covers whole-reply retries; the
+          // agent's own toolTrace covers any code it actually ran while
+          // producing this one reply — merge both so the chat UI's trace
+          // panel shows the full picture.
+          const fullTrace = [...trace, ...result.toolTrace];
           const attachments = await attachDocumentIfRequested(sessionId, result.document);
           void logMessage(sessionId, "aduf", result.reply, {
             question: result.question ?? null,
-            trace,
+            trace: fullTrace,
             attachments,
             analysis: result.analysis ?? null,
+            proposedAction: result.proposedAction ?? null,
           });
           return json({
             reply: result.reply,
             question: result.question ?? null,
-            trace,
+            trace: fullTrace,
             attachments,
             analysis: result.analysis ?? null,
+            proposedAction: result.proposedAction ?? null,
           });
         } catch (error) {
           if (error instanceof NoModelConfiguredError) {

@@ -24,6 +24,7 @@ import { Route as ApiModelKeysRouteImport } from './routes/api/model-keys'
 import { Route as ApiSkillsRouteImport } from './routes/api/skills'
 import { Route as ApiDocumentsConvertRouteImport } from './routes/api/documents/convert'
 import { Route as ApiDocumentsUploadRouteImport } from './routes/api/documents/upload'
+import { Route as ApiSandboxRunRouteImport } from './routes/api/sandbox/run'
 import { Route as ApiSkillsReplyRouteImport } from './routes/api/skills/reply'
 import { Route as ApiTasksRunRouteImport } from './routes/api/tasks/run'
 import { Route as ApiConnectorsProviderAuthorizeRouteImport } from './routes/api/connectors/$provider/authorize'
@@ -106,6 +107,11 @@ const ApiDocumentsUploadRoute = ApiDocumentsUploadRouteImport.update({
   path: '/upload',
   getParentRoute: () => ApiDocumentsRoute,
 } as any)
+const ApiSandboxRunRoute = ApiSandboxRunRouteImport.update({
+  id: '/api/sandbox/run',
+  path: '/api/sandbox/run',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSkillsReplyRoute = ApiSkillsReplyRouteImport.update({
   id: '/reply',
   path: '/reply',
@@ -155,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/upload': typeof ApiDocumentsUploadRoute
+  '/api/sandbox/run': typeof ApiSandboxRunRoute
   '/api/skills/reply': typeof ApiSkillsReplyRoute
   '/api/tasks/run': typeof ApiTasksRunRoute
   '/api/connectors/$provider/authorize': typeof ApiConnectorsProviderAuthorizeRoute
@@ -178,6 +185,7 @@ export interface FileRoutesByTo {
   '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/upload': typeof ApiDocumentsUploadRoute
+  '/api/sandbox/run': typeof ApiSandboxRunRoute
   '/api/skills/reply': typeof ApiSkillsReplyRoute
   '/api/tasks/run': typeof ApiTasksRunRoute
   '/api/connectors/$provider/authorize': typeof ApiConnectorsProviderAuthorizeRoute
@@ -202,6 +210,7 @@ export interface FileRoutesById {
   '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/upload': typeof ApiDocumentsUploadRoute
+  '/api/sandbox/run': typeof ApiSandboxRunRoute
   '/api/skills/reply': typeof ApiSkillsReplyRoute
   '/api/tasks/run': typeof ApiTasksRunRoute
   '/api/connectors/$provider/authorize': typeof ApiConnectorsProviderAuthorizeRoute
@@ -227,6 +236,7 @@ export interface FileRouteTypes {
     | '/api/skills'
     | '/api/documents/convert'
     | '/api/documents/upload'
+    | '/api/sandbox/run'
     | '/api/skills/reply'
     | '/api/tasks/run'
     | '/api/connectors/$provider/authorize'
@@ -250,6 +260,7 @@ export interface FileRouteTypes {
     | '/api/skills'
     | '/api/documents/convert'
     | '/api/documents/upload'
+    | '/api/sandbox/run'
     | '/api/skills/reply'
     | '/api/tasks/run'
     | '/api/connectors/$provider/authorize'
@@ -273,6 +284,7 @@ export interface FileRouteTypes {
     | '/api/skills'
     | '/api/documents/convert'
     | '/api/documents/upload'
+    | '/api/sandbox/run'
     | '/api/skills/reply'
     | '/api/tasks/run'
     | '/api/connectors/$provider/authorize'
@@ -295,6 +307,7 @@ export interface RootRouteChildren {
   ApiFxRoute: typeof ApiFxRoute
   ApiModelKeysRoute: typeof ApiModelKeysRoute
   ApiSkillsRoute: typeof ApiSkillsRouteWithChildren
+  ApiSandboxRunRoute: typeof ApiSandboxRunRoute
   ApiTasksRunRoute: typeof ApiTasksRunRoute
   ApiConnectorsProviderAuthorizeRoute: typeof ApiConnectorsProviderAuthorizeRoute
   ApiConnectorsProviderCallbackRoute: typeof ApiConnectorsProviderCallbackRoute
@@ -407,6 +420,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDocumentsUploadRouteImport
       parentRoute: typeof ApiDocumentsRoute
     }
+    '/api/sandbox/run': {
+      id: '/api/sandbox/run'
+      path: '/api/sandbox/run'
+      fullPath: '/api/sandbox/run'
+      preLoaderRoute: typeof ApiSandboxRunRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/skills/reply': {
       id: '/api/skills/reply'
       path: '/reply'
@@ -496,6 +516,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiFxRoute: ApiFxRoute,
   ApiModelKeysRoute: ApiModelKeysRoute,
   ApiSkillsRoute: ApiSkillsRouteWithChildren,
+  ApiSandboxRunRoute: ApiSandboxRunRoute,
   ApiTasksRunRoute: ApiTasksRunRoute,
   ApiConnectorsProviderAuthorizeRoute: ApiConnectorsProviderAuthorizeRoute,
   ApiConnectorsProviderCallbackRoute: ApiConnectorsProviderCallbackRoute,

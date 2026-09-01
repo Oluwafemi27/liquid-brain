@@ -31,35 +31,31 @@ export function GoalsBootstrap() {
 
     const channel = client
       .channel("goals-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "goals" },
-        (payload) => {
-          if (payload.eventType === "DELETE") {
-            const oldId = (payload.old as { id?: string })["id"];
-            if (oldId) removeGoal(oldId);
-            return;
-          }
-          const row = payload.new as {
-            id: string;
-            title: string;
-            target: number;
-            current: number;
-            currency: string;
-            due: string;
-            sub_tasks: Goal["subTasks"];
-          };
-          upsertGoal({
-            id: row.id,
-            title: row.title,
-            target: row.target,
-            current: row.current,
-            currency: row.currency,
-            due: row.due,
-            subTasks: row.sub_tasks ?? [],
-          });
-        },
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "goals" }, (payload) => {
+        if (payload.eventType === "DELETE") {
+          const oldId = (payload.old as { id?: string })["id"];
+          if (oldId) removeGoal(oldId);
+          return;
+        }
+        const row = payload.new as {
+          id: string;
+          title: string;
+          target: number;
+          current: number;
+          currency: string;
+          due: string;
+          sub_tasks: Goal["subTasks"];
+        };
+        upsertGoal({
+          id: row.id,
+          title: row.title,
+          target: row.target,
+          current: row.current,
+          currency: row.currency,
+          due: row.due,
+          subTasks: row.sub_tasks ?? [],
+        });
+      })
       .subscribe();
 
     return () => {

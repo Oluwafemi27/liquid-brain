@@ -1,12 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getConnectorStatuses } from "@/lib/server/connectors";
-import {
-  bumpGoal,
-  createGoal,
-  deleteGoal,
-  listGoals,
-  toggleGoalSubTask,
-} from "@/lib/server/goals";
+import { bumpGoal, createGoal, deleteGoal, listGoals, toggleGoalSubTask } from "@/lib/server/goals";
 import { getSurvey, saveSurvey, verifyAccessToken, type BusinessSurvey } from "@/lib/server/survey";
 
 export const fetchConnectorStatuses = createServerFn({ method: "GET" }).handler(async () => {

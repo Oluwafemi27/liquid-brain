@@ -1,9 +1,10 @@
 import "@tanstack/react-start/server-only";
 import { z } from "zod";
-import type { ChatMessage } from "@/lib/aduf-types";
+import type { AgentTraceStep, ChatMessage } from "@/lib/aduf-types";
 import { MODEL_PROVIDERS, callProviderChat, type ChatTurn } from "./model-providers";
 import { resolveDefaultModelKey } from "./model-keys";
 import { buildSkillsBlock, listSkills } from "./skills";
+import { isSandboxConfigured, runInSandbox } from "./sandbox";
 
 const ADUF_SEVERITIES = ["low", "medium", "high", "critical"] as const;
 
@@ -34,6 +35,43 @@ const adufFindingSchema = z.object({
 });
 
 export type AdufFinding = z.infer<typeof adufFindingSchema>;
+
+const CHANNEL_IDS = ["website", "whatsapp", "crm", "payments", "ads", "email"] as const;
+
+/** A concrete change to another page the agent wants to make — nothing is
+ *  applied anywhere until the owner taps Approve in chat. Keep this a
+ *  discriminated union so new action types (e.g. a settings change) can be
+ *  added later without touching existing ones. */
+const proposedActionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("create_goal"),
+    title: z.string().min(1).max(120),
+    target: z.number().positive(),
+    currency: z.string().max(3).optional().default(""),
+    reasoning: z.string().min(1).max(400),
+  }),
+  z.object({
+    type: z.literal("toggle_automation"),
+    channelId: z.enum(CHANNEL_IDS),
+    enabled: z.boolean(),
+    reasoning: z.string().min(1).max(400),
+  }),
+]);
+
+/** A tool the agent can invoke mid-reply instead of guessing — currently
+ *  just code execution in the E2B sandbox already wired for the tasks
+ *  pipeline. Kept as its own schema (not folded into proposedAction) since
+ *  it executes immediately, no owner approval needed — running a read-only
+ *  calculation in a throwaway sandbox isn't a change to the business, so
+ *  it doesn't need the same gate a real goal/automation change does. */
+const toolCallSchema = z.object({
+  type: z.literal("run_code"),
+  language: z.enum(["python", "javascript", "bash"]).default("python"),
+  code: z.string().min(1).max(20_000),
+  /** One short phrase shown to the owner while it runs, e.g. "Checking the
+   *  math on your margin scenario". */
+  purpose: z.string().min(1).max(200),
+});
 
 const agentReplySchema = z.object({
   reply: z.string().min(1),
@@ -76,6 +114,16 @@ const agentReplySchema = z.object({
     })
     .nullable()
     .optional(),
+  /** Set when the reply proposes a concrete, executable change to the Goals
+   *  page or Automation Grid — the owner sees an Approve/Dismiss card and
+   *  nothing happens until they tap Approve. Never combine with "question":
+   *  ask first, propose once you actually know enough to be specific. */
+  proposedAction: proposedActionSchema.nullable().optional(),
+  /** Set when the model wants to actually run code before finishing its
+   *  reply — see toolCallSchema. Executes immediately (no approval gate,
+   *  unlike proposedAction) and its real result is fed back before the
+   *  final reply. */
+  toolCall: toolCallSchema.nullable().optional(),
 });
 
 export type AgentReply = z.infer<typeof agentReplySchema>;
@@ -133,9 +181,48 @@ document/report). Put the real, complete content in it, not a summary of
 what it would contain. Only do this when a file is actually the right
 deliverable — most replies still need no document.
 
+=== Acting on other pages: proposedAction ===
+You are not limited to talking — when a reply calls for an actual change to
+the Goals page or the Automation Grid, attach "proposedAction" with the
+specific change. The owner always sees it as an Approve/Dismiss card first;
+nothing is created or toggled anywhere until they tap Approve, so propose
+freely whenever it's the right next step, but only when you actually have
+what a real goal or automation needs (a concrete title and target; a
+specific channel and on/off state) — if you don't, ask a "question" instead
+and propose once you know. Never set "question" and "proposedAction" on the
+same reply. Two shapes exist today:
+- {"type": "create_goal", "title": string, "target": number, "currency": string, "reasoning": string} —
+  currency is "₦" (or another symbol) for money goals, "" for a plain count
+  (bookings, signups, etc). "reasoning" is one short sentence the owner
+  reads on the approval card explaining why this goal, shown to them, not
+  hidden reasoning.
+- {"type": "toggle_automation", "channelId": "website"|"whatsapp"|"crm"|"payments"|"ads"|"email", "enabled": boolean, "reasoning": string} —
+  propose this to turn a channel automation on or off with a clear reason.
+
+=== Tool execution: toolCall ===
+When actually getting the answer right requires running code — a real
+calculation, checking a formula against real numbers, processing data the
+owner pasted in — set "toolCall" instead of guessing. It runs for real in
+a sandboxed environment and you'll see its actual stdout/stderr before you
+give your final "reply"; you can do this a few times in one reply if the
+first result tells you something you need to check further. Shape:
+{"type": "run_code", "language": "python"|"javascript"|"bash", "code": string, "purpose": string} —
+"purpose" is one short phrase the owner sees while it runs (e.g. "Checking
+the math on your margin scenario"). Only set this when execution is
+genuinely the right way to get it right — most replies need no tool call.
+Never claim you ran or checked something unless you actually set toolCall
+to do it; if the sandbox isn't configured or a run fails, say so plainly
+in your reply rather than pretending it worked. This executes immediately
+with no approval step (unlike proposedAction) — never use it to touch the
+owner's real data, only to compute/verify something.
+
 Respond with ONLY a single JSON object, no markdown fences, no prose outside
 it, matching exactly:
-{"reply": string, "question": {"prompt": string, "multi": boolean, "options": [{"id": string, "label": string, "value": string}]} | null, "document": {"filename": string, "format": "txt"|"md"|"docx"|"pdf", "content": string} | null, "analysis": {"summary": string, "findings": [{"area": "visibility"|"credibility"|"customer_journey"|"conversion"|"sales"|"retention"|"operations"|"local_presence"|"search_ai_visibility", "problem": string, "severity": "low"|"medium"|"high"|"critical", "rootCauses": string[], "opportunities": string[], "recommendedActions": string[], "estimatedImpact": string, "automationPossible": boolean, "automationNotes": string, "expertRequired": boolean, "expertType": string}]} | null}`;
+{"reply": string, "question": {"prompt": string, "multi": boolean, "options": [{"id": string, "label": string, "value": string}]} | null, "document": {"filename": string, "format": "txt"|"md"|"docx"|"pdf", "content": string} | null, "analysis": {"summary": string, "findings": [{"area": "visibility"|"credibility"|"customer_journey"|"conversion"|"sales"|"retention"|"operations"|"local_presence"|"search_ai_visibility", "problem": string, "severity": "low"|"medium"|"high"|"critical", "rootCauses": string[], "opportunities": string[], "recommendedActions": string[], "estimatedImpact": string, "automationPossible": boolean, "automationNotes": string, "expertRequired": boolean, "expertType": string}]} | null, "proposedAction": {"type": "create_goal", "title": string, "target": number, "currency": string, "reasoning": string} | {"type": "toggle_automation", "channelId": "website"|"whatsapp"|"crm"|"payments"|"ads"|"email", "enabled": boolean, "reasoning": string} | null, "toolCall": {"type": "run_code", "language": "python"|"javascript"|"bash", "code": string, "purpose": string} | null}`;
+
+/** Max code-execution round trips inside a single reply — bounds latency
+ *  and cost; almost every reply that needs a tool call needs it once. */
+const MAX_TOOL_CALLS = 3;
 
 export class NoModelConfiguredError extends Error {
   constructor() {
@@ -149,7 +236,11 @@ export class NoModelConfiguredError extends Error {
 
 /** Calls the agent's configured model with the ADUF persona plus every
  *  enabled business skill, asking for a reply in the app's structured
- *  reply-plus-optional-questionnaire-plus-analysis JSON shape.
+ *  reply-plus-optional-questionnaire-plus-analysis JSON shape. When the
+ *  model asks for a "toolCall", this actually runs it in the E2B sandbox
+ *  and feeds the real result back for another round before the final
+ *  reply — up to MAX_TOOL_CALLS times — so the agent can genuinely
+ *  execute code, not just describe what it would do.
  *  `repairContext`, when present, is a previous parse/validation failure
  *  fed back in so the model can correct itself — this is what the
  *  self-healing harness drives. `surveyContext`, when present, is the
@@ -161,7 +252,7 @@ export async function callAgent(
   userText: string,
   repairContext?: string,
   surveyContext?: string,
-): Promise<AgentReply> {
+): Promise<AgentReply & { toolTrace: AgentTraceStep[] }> {
   const key = await resolveDefaultModelKey();
   if (!key) throw new NoModelConfiguredError();
 
@@ -179,7 +270,7 @@ export async function callAgent(
       ? `\n\nYour previous reply was rejected: ${repairContext}\nReply again, following the JSON shape exactly.`
       : "");
 
-  const messages: ChatTurn[] = [
+  const turns: ChatTurn[] = [
     ...history.slice(-12).map((m) => ({
       role: m.role === "user" ? ("user" as const) : ("assistant" as const),
       content:
@@ -190,8 +281,83 @@ export async function callAgent(
     { role: "user" as const, content: userText },
   ];
 
-  const { text } = await callProviderChat(provider, key.apiKey, { system: systemPrompt, messages });
+  const toolTrace: AgentTraceStep[] = [];
+  let toolCallsUsed = 0;
 
+  for (let iteration = 0; iteration <= MAX_TOOL_CALLS; iteration++) {
+    const { text } = await callProviderChat(provider, key.apiKey, {
+      system: systemPrompt,
+      messages: turns,
+    });
+    const parsed = parseAgentReply(text);
+
+    if (!parsed.toolCall || toolCallsUsed >= MAX_TOOL_CALLS) {
+      return { ...parsed, toolTrace };
+    }
+
+    toolCallsUsed++;
+    const { language, code, purpose } = parsed.toolCall;
+    const step: AgentTraceStep = {
+      id: `tool-${Date.now()}-${toolCallsUsed}`,
+      label: `Ran code: ${purpose}`,
+      status: "running",
+    };
+    toolTrace.push(step);
+
+    // Keep the transcript coherent for the model's next turn: its own
+    // structured reply goes back in as an assistant turn, same shape it
+    // was asked to produce.
+    turns.push({
+      role: "assistant",
+      content: JSON.stringify({ reply: parsed.reply, question: null }),
+    });
+
+    if (!isSandboxConfigured()) {
+      step.status = "error";
+      step.detail = "No code sandbox configured (E2B_API_KEY not set on the server).";
+      turns.push({
+        role: "user",
+        content:
+          "Tool call failed: no code sandbox is configured on this server. Don't request " +
+          "run_code again — answer using only what you already know, and mention plainly " +
+          "in your reply that live code execution isn't available yet.",
+      });
+      continue;
+    }
+
+    try {
+      const run = await runInSandbox(code, { language, sessionId: "brain-chat" });
+      step.status = run.ok ? "done" : "error";
+      step.detail = run.ok
+        ? run.stdout.slice(0, 300) || "(no output)"
+        : run.error || run.stderr.slice(0, 300);
+      turns.push({
+        role: "user",
+        content:
+          `Tool result for run_code ("${purpose}"):\n` +
+          `stdout:\n${run.stdout.slice(0, 4000) || "(empty)"}\n` +
+          (run.stderr ? `stderr:\n${run.stderr.slice(0, 1000)}\n` : "") +
+          (run.error ? `error: ${run.error}\n` : "") +
+          `\nUse this real result to finish your answer. Give your final "reply" now unless ` +
+          `another run_code call is genuinely necessary.`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Sandbox execution failed";
+      step.status = "error";
+      step.detail = message;
+      turns.push({
+        role: "user",
+        content: `Tool call failed: ${message}. Don't retry the same call — answer using what you have.`,
+      });
+    }
+  }
+
+  // Unreachable in practice (the loop always returns once toolCallsUsed
+  // reaches MAX_TOOL_CALLS), but keeps the return type honest.
+  throw new Error("Agent reply loop ended without a final answer.");
+}
+
+function parseAgentReply(text: string): AgentReply {
   let parsedJson: unknown;
   try {
     parsedJson = JSON.parse(stripCodeFence(text));

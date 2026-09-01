@@ -42,17 +42,15 @@ export const Route = createFileRoute("/schedule")({
 
 const WEEKDAYS: Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-const CATEGORY_META: Record<
-  ScheduleCategory,
-  { label: string; color: string; icon: LucideIcon }
-> = {
-  meeting: { label: "Meeting", color: "var(--chart-2)", icon: Users },
-  content: { label: "Content", color: "var(--chart-3)", icon: PenLine },
-  campaign: { label: "Campaign", color: "var(--chart-1)", icon: Megaphone },
-  automation: { label: "Automation", color: "var(--cyan)", icon: Waves },
-  followup: { label: "Follow-up", color: "var(--chart-4)", icon: Phone },
-  other: { label: "Other", color: "var(--chart-5)", icon: CalendarClock },
-};
+const CATEGORY_META: Record<ScheduleCategory, { label: string; color: string; icon: LucideIcon }> =
+  {
+    meeting: { label: "Meeting", color: "var(--chart-2)", icon: Users },
+    content: { label: "Content", color: "var(--chart-3)", icon: PenLine },
+    campaign: { label: "Campaign", color: "var(--chart-1)", icon: Megaphone },
+    automation: { label: "Automation", color: "var(--cyan)", icon: Waves },
+    followup: { label: "Follow-up", color: "var(--chart-4)", icon: Phone },
+    other: { label: "Other", color: "var(--chart-5)", icon: CalendarClock },
+  };
 
 /** "14:05" -> "2:05 PM" */
 function formatTime(t: string) {
@@ -76,10 +74,7 @@ function SchedulePage() {
     useAduf();
 
   const weekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }), []);
-  const weekDates = useMemo(
-    () => WEEKDAYS.map((_, i) => addDays(weekStart, i)),
-    [weekStart],
-  );
+  const weekDates = useMemo(() => WEEKDAYS.map((_, i) => addDays(weekStart, i)), [weekStart]);
   const todayLabel = format(new Date(), "EEE") as Weekday;
 
   const [selectedDay, setSelectedDay] = useState<Weekday>(todayLabel);
@@ -95,7 +90,8 @@ function SchedulePage() {
     const map = new Map<Weekday, ScheduleEvent[]>();
     for (const d of WEEKDAYS) map.set(d, []);
     for (const e of scheduleEvents) map.get(e.day)?.push(e);
-    for (const d of WEEKDAYS) map.get(d)?.sort((a, b) => minutesOf(a.startTime) - minutesOf(b.startTime));
+    for (const d of WEEKDAYS)
+      map.get(d)?.sort((a, b) => minutesOf(a.startTime) - minutesOf(b.startTime));
     return map;
   }, [scheduleEvents]);
 
@@ -325,9 +321,7 @@ function SchedulePage() {
                     className="flex items-start gap-3 p-4 sm:gap-4 sm:p-5"
                   >
                     <div className="w-16 shrink-0 pt-0.5 text-right sm:w-20">
-                      <p className="text-xs font-medium tabular-nums">
-                        {formatTime(e.startTime)}
-                      </p>
+                      <p className="text-xs font-medium tabular-nums">{formatTime(e.startTime)}</p>
                       <p className="text-[10px] text-muted-foreground tabular-nums">
                         {formatTime(e.endTime)}
                       </p>
