@@ -1,0 +1,322 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Inter", sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-cyan: var(--cyan);
+  --color-violet: var(--violet);
+  --color-glass: var(--glass);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+}
+
+:root {
+  --radius: 1.125rem;
+  --background: oklch(0.145 0.018 258);
+  --foreground: oklch(0.97 0.005 250);
+  --card: oklch(0.22 0.02 258 / 55%);
+  --card-foreground: oklch(0.97 0.005 250);
+  --popover: oklch(0.19 0.02 258);
+  --popover-foreground: oklch(0.97 0.005 250);
+  --primary: oklch(0.93 0.005 250);
+  --primary-foreground: oklch(0.145 0.018 258);
+  --secondary: oklch(0.27 0.02 258 / 65%);
+  --secondary-foreground: oklch(0.97 0.005 250);
+  --muted: oklch(0.27 0.02 258 / 55%);
+  --muted-foreground: oklch(0.74 0.012 255);
+  --accent: oklch(0.84 0.06 195);
+  --accent-foreground: oklch(0.145 0.018 258);
+  --destructive: oklch(0.68 0.14 30);
+  --destructive-foreground: oklch(0.98 0.005 250);
+  --border: oklch(1 0 0 / 13%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.88 0.02 240);
+  --cyan: oklch(0.95 0.012 220);
+  --violet: oklch(0.78 0.02 260);
+  --glass: oklch(1 0 0 / 7%);
+  --chart-1: oklch(0.95 0.01 220);
+  --chart-2: oklch(0.72 0.02 260);
+  --chart-3: oklch(0.84 0.05 195);
+  --chart-4: oklch(0.6 0.02 250);
+  --chart-5: oklch(0.45 0.02 258);
+  --gradient-accent: linear-gradient(120deg, oklch(1 0 0 / 95%), oklch(0.82 0.02 250 / 90%));
+  --gradient-water: linear-gradient(
+    180deg,
+    oklch(1 0 0 / 42%),
+    oklch(0.9 0.015 240 / 26%)
+  );
+  --shadow-glass:
+    0 1px 0 0 oklch(1 0 0 / 14%) inset, 0 30px 70px -30px oklch(0.04 0.01 258 / 95%);
+  --glow-cyan: 0 0 46px -10px oklch(1 0 0 / 32%);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: dark;
+    overflow-x: hidden;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    /* Safety net so a stray fixed-width child (a chart, a wide row) never
+       forces the whole app into horizontal scroll on narrow phones —
+       everything should already fit without this, but it's a cheap guard. */
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+}
+
+@utility glass {
+  background: var(--color-glass);
+  backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-glass);
+  border-radius: var(--radius-2xl);
+}
+
+@utility glass-hover {
+  transition:
+    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+    background 0.35s ease,
+    box-shadow 0.35s ease;
+  &:hover {
+    transform: translateY(-3px);
+    background: oklch(1 0 0 / 12%);
+    box-shadow: var(--shadow-glass), var(--glow-cyan);
+  }
+}
+
+@utility text-gradient {
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility water-surface {
+  background: var(--gradient-water);
+}
+
+@keyframes aduf-ripple {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes aduf-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2%, -3%, 0) scale(1.08);
+  }
+}
+
+@keyframes aduf-wave {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes aduf-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* Continuous river flow: steady horizontal travel (linear, so the loop never
+   stalls) with a gentle vertical bob layered in so it reads as waves, not a
+   conveyor belt. The path is duplicated at 100% width, so -50% is a seamless
+   loop point. */
+@keyframes aduf-river-flow {
+  0% {
+    transform: translate3d(0%, 0, 0);
+  }
+  25% {
+    transform: translate3d(-12.5%, -7px, 0);
+  }
+  50% {
+    transform: translate3d(-25%, 3px, 0);
+  }
+  75% {
+    transform: translate3d(-37.5%, -4px, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes aduf-river-flow-reverse {
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+  25% {
+    transform: translate3d(-37.5%, 5px, 0);
+  }
+  50% {
+    transform: translate3d(-25%, -4px, 0);
+  }
+  75% {
+    transform: translate3d(-12.5%, 6px, 0);
+  }
+  100% {
+    transform: translate3d(0%, 0, 0);
+  }
+}
+
+/* A droplet of spray kicking up off a wave crest and falling back. */
+@keyframes aduf-splash {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.3);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.85;
+  }
+  70% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translate3d(0, -30px, 0) scale(1);
+    opacity: 0;
+  }
+}
+
+@utility animate-drift {
+  animation: aduf-drift 18s ease-in-out infinite;
+}
+
+@utility animate-wave {
+  animation: aduf-wave 6s linear infinite;
+}
+
+@utility animate-float {
+  animation: aduf-float 6s ease-in-out infinite;
+}
+
+@utility animate-ripple {
+  animation: aduf-ripple 2.6s ease-out infinite;
+}
+
+@utility animate-river {
+  animation: aduf-river-flow 17s linear infinite;
+}
+
+@utility animate-river-slow {
+  animation: aduf-river-flow-reverse 25s linear infinite;
+}
+
+@utility animate-splash {
+  animation: aduf-splash 2.4s ease-out infinite;
+}
+
+/* Fiber-optic "pipe" cable: a bright pulse of light shooting the length of
+   the tube, same motif as the glowing cables in the server rack — fast,
+   linear, and continuous so the connection always reads as live. */
+@keyframes aduf-pipe-shoot {
+  0% {
+    left: -32%;
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    left: 100%;
+    opacity: 0;
+  }
+}
+
+@utility animate-pipe-shoot {
+  animation: aduf-pipe-shoot 1s linear infinite;
+}
+
+@keyframes aduf-nucleus-pulse {
+  0%,
+  100% {
+    box-shadow:
+      var(--shadow-glass),
+      0 0 28px -4px oklch(1 0 0 / 45%);
+  }
+  50% {
+    box-shadow:
+      var(--shadow-glass),
+      0 0 44px -4px oklch(1 0 0 / 70%);
+  }
+}
+
+@utility animate-nucleus-pulse {
+  animation: aduf-nucleus-pulse 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
