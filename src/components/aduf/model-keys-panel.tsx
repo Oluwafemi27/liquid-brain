@@ -169,9 +169,9 @@ export function ModelKeysPanel() {
         </div>
       )}
 
-      <div className="flex flex-col gap-2 border-t border-border/60 pt-3 sm:flex-row">
+      <div className="flex flex-col gap-2 border-t border-border/60 pt-3 md:flex-row">
         <Select value={selected} onValueChange={setSelected}>
-          <SelectTrigger className="sm:w-44">
+          <SelectTrigger className="md:w-44">
             <SelectValue placeholder="Provider" />
           </SelectTrigger>
           <SelectContent>

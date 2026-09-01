@@ -161,7 +161,7 @@ function SettingsPage() {
             ))}
           </div>
 
-          <div className="space-y-5 sm:space-y-8">
+          <div className="min-w-0 space-y-5 sm:space-y-8">
             <div>
               <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 <Blocks className="h-4 w-4" /> Integrations

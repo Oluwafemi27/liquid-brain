@@ -212,9 +212,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <p className="truncate font-display text-xs font-semibold">ADUF AI</p>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex min-w-0 items-center gap-1">
           <NotificationBell />
-          <UserChip className="flex-row-reverse text-right" />
+          <UserChip className="min-w-0 max-w-28 flex-row-reverse text-right" />
         </div>
       </header>
 
