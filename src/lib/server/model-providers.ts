@@ -32,28 +32,28 @@ export const MODEL_PROVIDERS: Record<string, ModelProvider> = {
     displayName: "Gemini (Google)",
     apiStyle: "gemini",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    defaultModel: "gemini-2.5-flash",
+    defaultModel: "gemini-3.6-flash",
   },
   deepseek: {
     id: "deepseek",
     displayName: "DeepSeek",
     apiStyle: "openai_compatible",
     baseUrl: "https://api.deepseek.com/v1",
-    defaultModel: "deepseek-chat",
+    defaultModel: "deepseek-v4-flash",
   },
   groq: {
     id: "groq",
     displayName: "Groq",
     apiStyle: "openai_compatible",
     baseUrl: "https://api.groq.com/openai/v1",
-    defaultModel: "llama-3.3-70b-versatile",
+    defaultModel: "openai/gpt-oss-120b",
   },
   grok: {
     id: "grok",
     displayName: "Grok (xAI)",
     apiStyle: "openai_compatible",
     baseUrl: "https://api.x.ai/v1",
-    defaultModel: "grok-4",
+    defaultModel: "grok-4.5",
   },
 };
 

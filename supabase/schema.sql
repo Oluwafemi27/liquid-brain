@@ -79,10 +79,10 @@ create table if not exists model_providers (
 insert into model_providers (id, display_name, api_style, default_base_url, default_model) values
   ('openai',    'ChatGPT (OpenAI)', 'openai_compatible', 'https://api.openai.com/v1',            'gpt-5-mini'),
   ('anthropic', 'Claude (Anthropic)','anthropic',          'https://api.anthropic.com/v1',         'claude-sonnet-4-6'),
-  ('gemini',    'Gemini (Google)',  'gemini',             'https://generativelanguage.googleapis.com/v1beta', 'gemini-2.5-flash'),
-  ('deepseek',  'DeepSeek',         'openai_compatible', 'https://api.deepseek.com/v1',          'deepseek-chat'),
-  ('groq',      'Groq',             'openai_compatible', 'https://api.groq.com/openai/v1',       'llama-3.3-70b-versatile'),
-  ('grok',      'Grok (xAI)',       'openai_compatible', 'https://api.x.ai/v1',                  'grok-4')
+  ('gemini',    'Gemini (Google)',  'gemini',             'https://generativelanguage.googleapis.com/v1beta', 'gemini-3.6-flash'),
+  ('deepseek',  'DeepSeek',         'openai_compatible', 'https://api.deepseek.com/v1',          'deepseek-v4-flash'),
+  ('groq',      'Groq',             'openai_compatible', 'https://api.groq.com/openai/v1',       'openai/gpt-oss-120b'),
+  ('grok',      'Grok (xAI)',       'openai_compatible', 'https://api.x.ai/v1',                  'grok-4.5')
 on conflict (id) do update set
   display_name = excluded.display_name, api_style = excluded.api_style,
   default_base_url = excluded.default_base_url, default_model = excluded.default_model;
