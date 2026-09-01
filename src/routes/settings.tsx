@@ -112,7 +112,7 @@ function SettingsPage() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:py-8">
+      <div className="mx-auto max-w-[1500px] px-3 py-4 sm:px-6 sm:py-6 lg:py-8">
         <PageHeader eyebrow="Settings" title="You & your stack" />
 
         {banner ? (
@@ -124,20 +124,20 @@ function SettingsPage() {
           </GlassCard>
         ) : null}
 
-        <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
           <div className="space-y-4">
-            <GlassCard hover={false} className="text-center">
+            <GlassCard hover={false} className="p-4 text-center sm:p-5">
               <div
-                className="mx-auto grid h-16 w-16 place-items-center rounded-full"
+                className="mx-auto grid h-12 w-12 place-items-center rounded-full sm:h-16 sm:w-16"
                 style={{ background: "var(--gradient-accent)" }}
               >
-                <UserRound className="h-7 w-7 text-background" />
+                <UserRound className="h-5 w-5 text-background sm:h-7 sm:w-7" />
               </div>
               <input
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
                 placeholder="Add your name"
-                className="mt-3 w-full rounded-full bg-white/8 px-3 py-1.5 text-center text-lg font-semibold outline-none placeholder:text-muted-foreground/70 placeholder:font-normal placeholder:text-base focus:ring-2 focus:ring-ring"
+                className="mt-3 w-full rounded-full bg-white/8 px-3 py-2 text-center text-base font-semibold outline-none placeholder:text-base placeholder:font-normal placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-ring sm:text-lg"
               />
               <p className="mt-1 text-xs text-muted-foreground">Owner</p>
             </GlassCard>
@@ -161,7 +161,7 @@ function SettingsPage() {
             ))}
           </div>
 
-          <div className="space-y-8">
+          <div className="space-y-5 sm:space-y-8">
             <div>
               <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 <Blocks className="h-4 w-4" /> Integrations

@@ -1,30 +1,8 @@
-import type { Automation, ChannelId, DataSource, Insight, ScheduleEvent } from "./aduf-types";
+import type { DataSource, Insight, ScheduleEvent } from "./aduf-types";
 
 // Empty/neutral starting state for a fresh account — no fabricated business
 // numbers. Swap the getters that read this for real fetches against the
 // FastAPI backend when it lands; the shapes are already the DTOs.
-
-/** The six channels ADUF can automate. Structural (part of the product's
- *  fixed feature set), not business data — every account starts with all
- *  six present but disconnected and unconfigured. */
-export const initialAutomations: Automation[] = (
-  [
-    ["website", "Website"],
-    ["whatsapp", "WhatsApp"],
-    ["crm", "CRM"],
-    ["payments", "Payments"],
-    ["ads", "Ads"],
-    ["email", "Email"],
-  ] as [ChannelId, string][]
-).map(([id, name]) => ({
-  id,
-  name,
-  enabled: false,
-  trigger: "Not configured yet",
-  action: "Not configured yet",
-  goal: "",
-  runs: 0,
-}));
 
 /** Data sources ADUF can connect to. A product catalog, not business data —
  *  every account starts fully disconnected. */

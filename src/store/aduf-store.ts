@@ -15,14 +15,14 @@ import type {
   SeriesPoint,
   TopCustomer,
 } from "@/lib/aduf-types";
-import {
-  initialAutomations,
-  initialDataSources,
-  initialInsights,
-  initialScheduleEvents,
-} from "@/lib/initial-data";
+import { initialDataSources, initialInsights, initialScheduleEvents } from "@/lib/initial-data";
 import { useAuth } from "@/store/auth-store";
-import { bumpGoalFn, createGoalFn, toggleGoalSubTaskFn } from "@/lib/server-fns";
+import {
+  bumpGoalFn,
+  createGoalFn,
+  setAutomationEnabledFn,
+  toggleGoalSubTaskFn,
+} from "@/lib/server-fns";
 
 function makeSessionId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -58,6 +58,9 @@ interface AdufState {
   scheduleEvents: ScheduleEvent[];
   setUserName: (name: string) => void;
   toggleAutomation: (id: ChannelId) => void;
+  setAutomations: (automations: Automation[]) => void;
+  upsertAutomation: (automation: Automation) => void;
+  removeAutomation: (id: ChannelId) => void;
   toggleSubTask: (goalId: string, taskId: string) => void;
   bumpGoal: (goalId: string, amount: number) => void;
   addGoal: (title: string, target: number) => void;
@@ -106,7 +109,7 @@ export const useAduf = create<AdufState>((set, get) => ({
   channelRevenue: [],
   funnel: [],
   goals: [],
-  automations: initialAutomations,
+  automations: [],
   memoryNodes: [],
   memoryEdges: [],
   sources: initialDataSources,
@@ -118,23 +121,30 @@ export const useAduf = create<AdufState>((set, get) => ({
 
   setUserName: (name) => set({ userName: name }),
 
-  toggleAutomation: (id) =>
+  toggleAutomation: (id) => {
+    const automation = get().automations.find((item) => item.id === id);
+    if (!automation) return;
+    setAutomationEnabledFn({ data: { id, enabled: !automation.enabled } })
+      .then((updated) => {
+        if (updated) get().upsertAutomation(updated);
+      })
+      .catch((err) => console.error("[automations] toggle failed", err));
+  },
+
+  setAutomations: (automations) => set({ automations }),
+
+  upsertAutomation: (automation) =>
     set((s) => {
-      const automations = s.automations.map((a) =>
-        a.id === id ? { ...a, enabled: !a.enabled } : a,
-      );
-      const a = automations.find((x) => x.id === id);
-      if (!a) return { automations };
-      const insight = makeInsight({
-        title: a.enabled ? `${a.name} automation turned on` : `${a.name} automation paused`,
-        body: a.enabled
-          ? `ADUF is now running the ${a.name} automation and will report results here.`
-          : `${a.name} automation is paused — double-tap its node in the Command Center to resume.`,
-        severity: a.enabled ? "success" : "info",
-        source: "Automations",
-      });
-      return { automations, insights: [insight, ...s.insights] };
+      const exists = s.automations.some((item) => item.id === automation.id);
+      return {
+        automations: exists
+          ? s.automations.map((item) => (item.id === automation.id ? automation : item))
+          : [...s.automations, automation],
+      };
     }),
+
+  removeAutomation: (id) =>
+    set((s) => ({ automations: s.automations.filter((item) => item.id !== id) })),
 
   // Goals are persisted server-side (Supabase) — these actions fire the
   // request and let the response (or the realtime subscription in
