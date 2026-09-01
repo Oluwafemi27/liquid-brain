@@ -106,7 +106,7 @@ export function ModelKeysPanel() {
   };
 
   return (
-    <GlassCard hover={false} className="space-y-4">
+    <GlassCard hover={false} className="min-h-16 space-y-4 rounded-2xl p-4">
       <div className="flex items-center gap-2">
         <KeyRound className="h-4 w-4 text-cyan" />
         <h3 className="text-sm font-semibold">AI Model Keys</h3>
@@ -128,7 +128,7 @@ export function ModelKeysPanel() {
           {providers.map((p) => (
             <div
               key={p.providerId}
-              className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 rounded-xl border border-border/60 px-3 py-2 text-sm"
+              className="flex min-h-16 flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 p-4 text-sm"
             >
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {p.connected ? (

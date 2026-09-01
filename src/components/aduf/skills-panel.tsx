@@ -53,7 +53,7 @@ export function SkillsPanel() {
   }, {});
 
   return (
-    <GlassCard hover={false} className="space-y-4">
+    <GlassCard hover={false} className="min-h-16 space-y-4 rounded-2xl p-4">
       <div className="flex items-center gap-2">
         <Sparkle className="h-4 w-4 text-cyan" />
         <h3 className="text-sm font-semibold">Business Skills</h3>
@@ -81,7 +81,7 @@ export function SkillsPanel() {
                 {items.map((s) => (
                   <div
                     key={s.id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-border/60 px-3 py-2"
+                    className="flex min-h-16 items-center justify-between gap-3 rounded-2xl border border-border/60 p-4"
                   >
                     <div className="min-w-0">
                       <p className="break-words text-sm">{s.title}</p>
