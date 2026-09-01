@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { setAutomationEnabled, listAutomations } from "@/lib/server/automations";
 import { getConnectorStatuses } from "@/lib/server/connectors";
 import { bumpGoal, createGoal, deleteGoal, listGoals, toggleGoalSubTask } from "@/lib/server/goals";
 import { getSurvey, saveSurvey, verifyAccessToken, type BusinessSurvey } from "@/lib/server/survey";
@@ -10,6 +11,16 @@ export const fetchConnectorStatuses = createServerFn({ method: "GET" }).handler(
 export const fetchGoals = createServerFn({ method: "GET" }).handler(async () => {
   return listGoals();
 });
+
+export const fetchAutomations = createServerFn({ method: "GET" }).handler(async () => {
+  return listAutomations();
+});
+
+export const setAutomationEnabledFn = createServerFn({ method: "POST" })
+  .validator((data: { id: import("@/lib/aduf-types").ChannelId; enabled: boolean }) => data)
+  .handler(async ({ data }) => {
+    return setAutomationEnabled(data.id, data.enabled);
+  });
 
 export const createGoalFn = createServerFn({ method: "POST" })
   .validator((data: { title: string; target: number; currency: string }) => data)

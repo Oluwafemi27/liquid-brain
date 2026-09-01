@@ -96,7 +96,13 @@ function AutomationsPage() {
             </div>
           </div>
 
-          <div className="grid items-center gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+          {automations.length === 0 ? (
+            <div className="flex min-h-64 items-center justify-center text-center text-sm text-muted-foreground">
+              No live automations yet. Connected automation records will appear here in real time.
+            </div>
+          ) : null}
+
+          <div className={cn("grid items-center gap-6 lg:grid-cols-[minmax(0,1fr)_300px]", automations.length === 0 && "hidden")}>
             <div className="relative mx-auto aspect-square w-full max-w-[560px] lg:mx-0">
               <HexRing scale={1} opacity={0.7} duration={90} />
               <HexRing scale={0.78} opacity={0.4} duration={70} />

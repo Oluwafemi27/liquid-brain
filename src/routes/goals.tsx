@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { BarChart3, Check, Plus, Target, Trophy } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell, PageHeader } from "@/components/aduf/app-shell";
 import { GlassCard, WaterOrb } from "@/components/aduf/liquid";
 import { formatUsd, toUsd, useUsdRates } from "@/lib/currency";
@@ -51,6 +52,16 @@ function GoalsPage() {
     { label: "In progress", count: inProgress.length, color: "bg-cyan-300" },
     { label: "Not started", count: notStarted.length, color: "bg-white/25" },
   ].filter((b) => b.count > 0);
+  const goalAnalytics = useMemo(
+    () =>
+      goals.map((goal) => ({
+        label: goal.title,
+        progress: Math.min(100, goalPct(goal)),
+        current: goal.current,
+        target: goal.target,
+      })),
+    [goals],
+  );
 
   return (
     <AppShell>
@@ -101,20 +112,71 @@ function GoalsPage() {
           </GlassCard>
         ) : null}
 
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        {goals.length > 0 ? (
+          <GlassCard hover={false} className="mb-6 min-w-0 p-4 sm:p-5">
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                  Live analytics
+                </p>
+                <h2 className="mt-1 text-base font-semibold">Goal completion</h2>
+              </div>
+              <p className="text-xs text-muted-foreground">Updates as progress is logged</p>
+            </div>
+            <div className="h-52 sm:h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={goalAnalytics} layout="vertical" margin={{ left: 0, right: 12 }}>
+                  <XAxis type="number" domain={[0, 100]} hide />
+                  <YAxis
+                    type="category"
+                    dataKey="label"
+                    width={88}
+                    tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                    tickFormatter={(value: string) =>
+                      value.length > 14 ? `${value.slice(0, 14)}…` : value
+                    }
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                    contentStyle={{
+                      background: "var(--popover)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 12,
+                      color: "var(--foreground)",
+                    }}
+                    formatter={(value: number, _name, item) => [
+                      `${value}% · ${item.payload.current.toLocaleString()} of ${item.payload.target.toLocaleString()}`,
+                      "Progress",
+                    ]}
+                  />
+                  <Bar dataKey="progress" radius={[0, 8, 8, 0]} animationDuration={600}>
+                    {goalAnalytics.map((goal) => (
+                      <Cell
+                        key={goal.label}
+                        fill={goal.progress >= 100 ? "var(--chart-1)" : "var(--cyan)"}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </GlassCard>
+        ) : null}
+
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-3">
           {goals.length === 0 ? (
             <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
               No goals yet — set one with "New Goal" and ADUF will help you track it.
             </p>
           ) : null}
           {goals.map((goal, i) => {
-            const pct = Math.round((goal.current / goal.target) * 100);
+            const pct = goalPct(goal);
             const complete = pct >= 100;
             return (
               <GlassCard key={goal.id} delay={i * 0.06} className="flex flex-col">
                 <div className="flex flex-col items-center text-center">
-                  <WaterOrb fill={pct} size={160} burst={complete}>
-                    <span className="font-display text-3xl font-semibold">{pct}%</span>
+                  <WaterOrb fill={pct} size={144} burst={complete}>
+                    <span className="font-display text-2xl font-semibold sm:text-3xl">{pct}%</span>
                     <span className="mt-0.5 text-[11px] text-muted-foreground">due {goal.due}</span>
                   </WaterOrb>
                   <h3 className="mt-4 text-base font-semibold">{goal.title}</h3>

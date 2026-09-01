@@ -16,6 +16,7 @@ import { useAduf } from "@/store/aduf-store";
 import { useAuth } from "@/store/auth-store";
 import { LiquidBackground } from "./liquid";
 import { AuthBootstrap } from "./auth-bootstrap";
+import { AutomationsBootstrap } from "./automations-bootstrap";
 import { GoalsBootstrap } from "./goals-bootstrap";
 import { SignInGate } from "./sign-in-gate";
 import { SignInModal } from "./sign-in-modal";
@@ -134,6 +135,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen overflow-x-hidden">
       <AuthBootstrap />
       <GoalsBootstrap />
+      <AutomationsBootstrap />
       <SignInModal />
       <SurveyModal />
       <LiquidBackground />
