@@ -1,6 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { CreditCard, Database, Globe, Mail, Megaphone, MessageCircle, Radio } from "lucide-react";
+import {
+  Bot,
+  CreditCard,
+  Database,
+  Globe,
+  Mail,
+  Megaphone,
+  MessageCircle,
+  Play,
+  Radio,
+} from "lucide-react";
 import { useState } from "react";
 import automationCore from "@/assets/automation-core.png";
 import liveFeed from "@/assets/automation-live-feed.webp";
@@ -19,6 +29,12 @@ const CHANNEL_ICONS: Record<ChannelId, typeof Globe> = {
   ads: Megaphone,
   email: Mail,
 };
+
+/** Icon for a given automation's node — one of the 6 fixed channel icons if
+ *  it has a channel, otherwise a generic bot icon for AI-created ones. */
+function iconFor(channel: ChannelId | undefined) {
+  return channel ? CHANNEL_ICONS[channel] : Bot;
+}
 
 /** Hexagon outline, drawn point-up so its six vertices line up with the six
  *  orbiting channel nodes below. Pure decoration — no hit targets. */
@@ -71,8 +87,8 @@ export const Route = createFileRoute("/automations")({
 });
 
 function AutomationsPage() {
-  const { automations, toggleAutomation, insights } = useAduf();
-  const [open, setOpen] = useState<ChannelId | null>(null);
+  const { automations, toggleAutomation, runAutomation, insights } = useAduf();
+  const [open, setOpen] = useState<string | null>(null);
   const active = automations.find((a) => a.id === open) ?? null;
   const liveCount = automations.filter((a) => a.enabled).length;
 
@@ -102,7 +118,12 @@ function AutomationsPage() {
             </div>
           ) : null}
 
-          <div className={cn("grid items-center gap-6 lg:grid-cols-[minmax(0,1fr)_300px]", automations.length === 0 && "hidden")}>
+          <div
+            className={cn(
+              "grid items-center gap-6 lg:grid-cols-[minmax(0,1fr)_300px]",
+              automations.length === 0 && "hidden",
+            )}
+          >
             <div className="relative mx-auto aspect-square w-full max-w-[560px] lg:mx-0">
               <HexRing scale={1} opacity={0.7} duration={90} />
               <HexRing scale={0.78} opacity={0.4} duration={70} />
@@ -131,7 +152,7 @@ function AutomationsPage() {
                 const r = 44; // % radius
                 const left = 50 + Math.cos(angle) * r;
                 const top = 50 + Math.sin(angle) * r;
-                const Icon = CHANNEL_ICONS[a.id];
+                const Icon = iconFor(a.channel);
                 const isOpen = open === a.id;
                 return (
                   <div
@@ -170,7 +191,7 @@ function AutomationsPage() {
                     ) : null}
 
                     <span className="absolute left-1/2 -top-6 -translate-x-1/2 whitespace-nowrap font-display text-[9px] font-semibold tracking-widest text-muted-foreground">
-                      0{i + 1}
+                      {a.source === "ai" ? "AI" : `0${i + 1}`}
                     </span>
 
                     <button
@@ -261,21 +282,57 @@ function AutomationsPage() {
                     ))}
                   </div>
 
-                  <div className="mt-5 flex items-center justify-between gap-4">
+                  {active.steps && active.steps.length > 0 ? (
+                    <div className="mt-4">
+                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                        Pipeline
+                      </p>
+                      <ol className="mt-2 space-y-2">
+                        {active.steps.map((step, idx) => (
+                          <li
+                            key={idx}
+                            className="flex items-start gap-2 rounded-xl bg-white/4 px-3 py-2 text-xs"
+                          >
+                            <span className="mt-0.5 shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
+                              {step.kind === "get_data"
+                                ? "Get"
+                                : step.kind === "process_data"
+                                  ? "Process"
+                                  : "Send"}
+                            </span>
+                            <span>{step.label}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-xs text-muted-foreground">
                       {active.runs.toLocaleString()} runs all time
+                      {active.source === "ai" ? " · created by ADUF" : ""}
                     </p>
-                    <button
-                      onClick={() => toggleAutomation(active.id)}
-                      className="rounded-full px-5 py-2.5 text-xs font-medium"
-                      style={
-                        active.enabled
-                          ? { border: "1px solid var(--border)" }
-                          : { background: "var(--gradient-accent)", color: "var(--background)" }
-                      }
-                    >
-                      {active.enabled ? "Turn off" : "Turn on"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => runAutomation(active.id)}
+                        disabled={!active.enabled}
+                        className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Play className="h-3 w-3" />
+                        Run now
+                      </button>
+                      <button
+                        onClick={() => toggleAutomation(active.id)}
+                        className="rounded-full px-5 py-2.5 text-xs font-medium"
+                        style={
+                          active.enabled
+                            ? { border: "1px solid var(--border)" }
+                            : { background: "var(--gradient-accent)", color: "var(--background)" }
+                        }
+                      >
+                        {active.enabled ? "Turn off" : "Turn on"}
+                      </button>
+                    </div>
                   </div>
                 </>
               ) : (

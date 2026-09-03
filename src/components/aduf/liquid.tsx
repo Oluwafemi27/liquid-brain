@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /** Builds a seamless, tileable wave path: alternating up/down bezier bumps
@@ -160,11 +160,13 @@ export function GlassCard({
   className,
   hover = true,
   delay = 0,
+  onClick,
 }: {
   children: ReactNode;
   className?: string;
   hover?: boolean;
   delay?: number;
+  onClick?: (e: MouseEvent<HTMLDivElement>) => void;
 }) {
   return (
     <motion.div
@@ -172,6 +174,7 @@ export function GlassCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay, ease: [0.2, 0.8, 0.2, 1] }}
       className={cn("glass relative overflow-hidden p-5", hover && "glass-hover", className)}
+      onClick={onClick}
     >
       <div
         aria-hidden

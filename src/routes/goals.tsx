@@ -28,13 +28,54 @@ export const Route = createFileRoute("/goals")({
 });
 
 function GoalsPage() {
-  const { goals, toggleSubTask, bumpGoal, addGoal } = useAduf();
+  const { goals, toggleSubTask, bumpGoal, addGoal, updateGoal } = useAduf();
   const { rates } = useUsdRates();
   const formatGoalAmount = (amount: number, currency: string) =>
     currency ? formatUsd(toUsd(amount, currency, rates)) : amount.toLocaleString();
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [target, setTarget] = useState("100");
+
+  // Which goal's "Log progress" popover is open, plus the amount typed in
+  // it. Replaces the old behaviour of silently adding a fixed 10% of the
+  // target on every click regardless of what actually happened.
+  const [loggingGoalId, setLoggingGoalId] = useState<string | null>(null);
+  const [logAmount, setLogAmount] = useState("");
+
+  // The goal currently open in the Edit Plan modal, plus its draft fields.
+  // Previously this button had no handler at all.
+  const [editingGoal, setEditingGoal] = useState<(typeof goals)[number] | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editTarget, setEditTarget] = useState("");
+  const [editDue, setEditDue] = useState("");
+
+  function openEdit(goal: (typeof goals)[number]) {
+    setEditingGoal(goal);
+    setEditTitle(goal.title);
+    setEditTarget(String(goal.target));
+    setEditDue(goal.due ?? "");
+  }
+
+  function saveEdit() {
+    if (!editingGoal) return;
+    const patch: Parameters<typeof updateGoal>[1] = {};
+    if (editTitle.trim() && editTitle.trim() !== editingGoal.title) patch.title = editTitle.trim();
+    const targetNum = Number(editTarget);
+    if (editTarget.trim() && !Number.isNaN(targetNum) && targetNum !== editingGoal.target) {
+      patch.target = targetNum;
+    }
+    if (editDue.trim() && editDue.trim() !== editingGoal.due) patch.due = editDue.trim();
+    if (Object.keys(patch).length > 0) updateGoal(editingGoal.id, patch);
+    setEditingGoal(null);
+  }
+
+  function submitLogProgress(goalId: string) {
+    const amount = Number(logAmount);
+    if (!logAmount.trim() || Number.isNaN(amount) || amount === 0) return;
+    bumpGoal(goalId, amount);
+    setLoggingGoalId(null);
+    setLogAmount("");
+  }
 
   // Every number below is derived from the real `goals` array — no
   // fabricated business figures. A fresh account with zero goals shows
@@ -212,20 +253,62 @@ function GoalsPage() {
                   ))}
                 </ul>
 
-                <div className="mt-4 flex gap-2">
-                  <button
-                    onClick={() => bumpGoal(goal.id, Math.round(goal.target * 0.1))}
-                    className="flex-1 rounded-full border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-white/8 hover:text-foreground"
-                  >
-                    Log progress
-                  </button>
-                  <motion.button
-                    whileTap={{ scale: 0.96 }}
-                    className="flex-1 rounded-full px-3 py-2 text-xs font-medium text-background"
-                    style={{ background: "var(--gradient-accent)" }}
-                  >
-                    Edit Plan
-                  </motion.button>
+                <div className="mt-4 flex flex-col gap-2">
+                  {loggingGoalId === goal.id ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        submitLogProgress(goal.id);
+                      }}
+                      className="flex gap-2"
+                    >
+                      <input
+                        autoFocus
+                        value={logAmount}
+                        onChange={(e) => setLogAmount(e.target.value)}
+                        inputMode="decimal"
+                        placeholder={`Amount in ${goal.currency || "units"}`}
+                        className="min-w-0 flex-1 rounded-full bg-white/8 px-3 py-2 text-xs outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-full px-3 py-2 text-xs font-medium text-background"
+                        style={{ background: "var(--gradient-accent)" }}
+                      >
+                        Add
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoggingGoalId(null);
+                          setLogAmount("");
+                        }}
+                        className="rounded-full border border-border px-3 py-2 text-xs text-muted-foreground"
+                      >
+                        Cancel
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setLoggingGoalId(goal.id);
+                          setLogAmount("");
+                        }}
+                        className="flex-1 rounded-full border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-white/8 hover:text-foreground"
+                      >
+                        Log progress
+                      </button>
+                      <motion.button
+                        whileTap={{ scale: 0.96 }}
+                        onClick={() => openEdit(goal)}
+                        className="flex-1 rounded-full px-3 py-2 text-xs font-medium text-background"
+                        style={{ background: "var(--gradient-accent)" }}
+                      >
+                        Edit Plan
+                      </motion.button>
+                    </div>
+                  )}
                 </div>
               </GlassCard>
             );
@@ -320,6 +403,73 @@ function GoalsPage() {
           </section>
         ) : null}
       </div>
+
+      {editingGoal ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          onClick={() => setEditingGoal(null)}
+        >
+          <GlassCard
+            hover={false}
+            className="w-full max-w-sm p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold">Edit plan</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Update the target, name, or due date for this goal.
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Name
+                </label>
+                <input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="mt-1 w-full rounded-xl bg-white/8 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Target ({editingGoal.currency || "units"})
+                </label>
+                <input
+                  value={editTarget}
+                  onChange={(e) => setEditTarget(e.target.value)}
+                  inputMode="decimal"
+                  className="mt-1 w-full rounded-xl bg-white/8 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Due
+                </label>
+                <input
+                  value={editDue}
+                  onChange={(e) => setEditDue(e.target.value)}
+                  placeholder="e.g. Dec 2026"
+                  className="mt-1 w-full rounded-xl bg-white/8 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={() => setEditingGoal(null)}
+                className="flex-1 rounded-full border border-border px-4 py-2.5 text-xs text-muted-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEdit}
+                className="flex-1 rounded-full px-4 py-2.5 text-xs font-medium text-background"
+                style={{ background: "var(--gradient-accent)" }}
+              >
+                Save changes
+              </button>
+            </div>
+          </GlassCard>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

@@ -94,6 +94,37 @@ export async function bumpGoal(goalId: string, amount: number): Promise<Goal | n
   return fromRow(data);
 }
 
+/** Edits a goal's editable fields directly (title, target, currency, due
+ *  date). Unlike bumpGoal, this sets values rather than adding to them —
+ *  it's what the "Edit Plan" button on the Goals page calls. Only fields
+ *  actually passed in are updated. */
+export async function updateGoal(
+  goalId: string,
+  patch: { title?: string; target?: number; currency?: string; due?: string },
+): Promise<Goal | null> {
+  const db = getSupabaseAdmin();
+  if (!db) return null;
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.title !== undefined) updates["title"] = patch.title;
+  if (patch.target !== undefined) updates["target"] = patch.target;
+  if (patch.currency !== undefined) updates["currency"] = patch.currency;
+  if (patch.due !== undefined) updates["due"] = patch.due;
+
+  const { data, error } = await db
+    .from("goals")
+    .update(updates)
+    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("id", goalId)
+    .select("id, title, target, current, currency, due, sub_tasks")
+    .single();
+  if (error || !data) {
+    console.error("[goals] failed to update goal", error);
+    return null;
+  }
+  return fromRow(data);
+}
+
 export async function toggleGoalSubTask(goalId: string, taskId: string): Promise<Goal | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;

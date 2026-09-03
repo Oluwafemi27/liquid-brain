@@ -18,6 +18,12 @@ function summarize(action: ProposedAction): { icon: typeof Target; title: string
       : action.target.toLocaleString();
     return { icon: Target, title: `New goal: "${action.title}" — target ${amount}` };
   }
+  if (action.type === "create_automation") {
+    return {
+      icon: Sparkles,
+      title: `New automation: "${action.name}"${action.goalTitle ? ` → feeds "${action.goalTitle}"` : ""}`,
+    };
+  }
   return {
     icon: Zap,
     title: `${action.enabled ? "Turn on" : "Turn off"} ${CHANNEL_LABEL[action.channelId] ?? action.channelId} automation`,

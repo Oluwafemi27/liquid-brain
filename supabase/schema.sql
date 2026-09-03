@@ -17,6 +17,9 @@ create table if not exists chat_messages (
   question jsonb,
   answered_values jsonb,
   trace jsonb,
+  attachments jsonb,
+  analysis jsonb,
+  proposed_action jsonb,
   created_at timestamptz not null default now()
 );
 create index if not exists chat_messages_session_idx
@@ -195,6 +198,8 @@ alter table goals enable row level security;
 create policy "Public read (single-tenant)" on goals for select using (true);
 
 alter publication supabase_realtime add table goals;
+alter publication supabase_realtime add table automations;
+alter publication supabase_realtime add table chat_messages;
 
 -- 008_chat_message_extras: two columns referenced by src/routes/api/chat.ts
 -- that were missing from this schema file. `attachments` stores the
@@ -283,3 +288,93 @@ insert into agent_skills (id, category, title, description, system_prompt, sort_
  'When conversion or sales problems trace back to the offer itself rather than the page or the pitch, help redesign what''s actually being sold: is the value framed clearly, is there a compelling reason to buy now, does the risk sit with the business or the customer (guarantees, trials, easy cancellation), and is there an entry-level option that lowers the first-purchase barrier. A weak offer makes every other marketing fix underperform — check this before spending more on traffic or ads. Feeds the "Conversion" and "Sales" diagnostic areas.',
  112)
 on conflict (id) do nothing;
+
+-- === Migration 005: automations table, automation runs log, admin flag ===
+-- The `automations` table referenced by src/lib/server/automations.ts never
+-- actually existed in the live database, which is why the Grid page always
+-- showed "No live automations yet" — there was nothing to select. This
+-- creates it, seeds the 6 built-in channel automations, and adds a log
+-- table + goal link so automations can run a real get-data -> process ->
+-- act pipeline whose results feed straight into a goal's progress.
+
+create table if not exists automations (
+  id text primary key,
+  workspace_id text not null default 'default',
+  name text not null,
+  enabled boolean not null default false,
+  trigger text not null default '',
+  action text not null default '',
+  goal text not null default '',
+  runs int not null default 0,
+  channel text,                         -- one of the 6 ChannelId values, for icon lookup; null for AI-created
+  source text not null default 'builtin' check (source in ('builtin', 'ai')),
+  steps jsonb,                          -- [{kind: 'get_data'|'process_data'|'send_action', label: string}]
+  goal_id uuid references goals(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists automations_workspace_idx on automations (workspace_id);
+
+insert into automations (id, workspace_id, name, enabled, trigger, action, goal, runs, channel, source, steps) values
+  ('website',  'default', 'Website',  false, 'New form submission on your site', 'Send lead straight to your CRM and notify you on WhatsApp', '', 0, 'website',  'builtin',
+    '[{"kind":"get_data","label":"Watch website form submissions"},{"kind":"process_data","label":"Extract contact + intent"},{"kind":"send_action","label":"Push lead to CRM and notify WhatsApp"}]'::jsonb),
+  ('whatsapp', 'default', 'WhatsApp', false, 'Customer messages your WhatsApp number', 'Auto-reply with business hours and hand off to you for anything complex', '', 0, 'whatsapp', 'builtin',
+    '[{"kind":"get_data","label":"Watch incoming WhatsApp messages"},{"kind":"process_data","label":"Classify intent (FAQ vs needs human)"},{"kind":"send_action","label":"Auto-reply or escalate to owner"}]'::jsonb),
+  ('crm',      'default', 'CRM',      false, 'Deal stage changes in your CRM', 'Update revenue forecast and flag stalled deals', '', 0, 'crm',      'builtin',
+    '[{"kind":"get_data","label":"Poll CRM deal stages"},{"kind":"process_data","label":"Recompute forecast + find stalled deals"},{"kind":"send_action","label":"Alert owner on stalled high-value deals"}]'::jsonb),
+  ('payments', 'default', 'Payments', false, 'Payment received or failed', 'Log revenue against the linked goal and retry failed charges', '', 0, 'payments', 'builtin',
+    '[{"kind":"get_data","label":"Watch payment events"},{"kind":"process_data","label":"Sum successful revenue, flag failures"},{"kind":"send_action","label":"Log revenue to goal + retry failed charge"}]'::jsonb),
+  ('ads',      'default', 'Ads',      false, 'Daily ad spend/performance refresh', 'Pause underperforming ads and reallocate budget', '', 0, 'ads',      'builtin',
+    '[{"kind":"get_data","label":"Pull daily ad spend + conversions"},{"kind":"process_data","label":"Compute cost per result per campaign"},{"kind":"send_action","label":"Pause worst performer, note reallocation"}]'::jsonb),
+  ('email',    'default', 'Email',    false, 'New subscriber or abandoned checkout', 'Send the right lifecycle email automatically', '', 0, 'email',    'builtin',
+    '[{"kind":"get_data","label":"Watch subscriber + checkout events"},{"kind":"process_data","label":"Match event to lifecycle stage"},{"kind":"send_action","label":"Send the matching email"}]'::jsonb)
+on conflict (id) do nothing;
+
+alter publication supabase_realtime add table automations;
+
+create table if not exists automation_runs (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id text not null default 'default',
+  automation_id text not null references automations(id) on delete cascade,
+  started_at timestamptz not null default now(),
+  status text not null check (status in ('success', 'error')),
+  summary text not null,
+  value numeric
+);
+create index if not exists automation_runs_automation_idx
+  on automation_runs (workspace_id, automation_id, started_at desc);
+alter publication supabase_realtime add table automation_runs;
+
+-- Admin allowlist, used to gate the /admin panel. This app has no separate
+-- `profiles` table — identity is Supabase Auth's own auth.users — so admin
+-- status is a simple email allowlist rather than a column on a table that
+-- doesn't exist.
+create table if not exists admins (
+  email text primary key,
+  created_at timestamptz not null default now()
+);
+insert into admins (email) values ('oluseyioke39@gmail.com')
+on conflict (email) do nothing;
+
+-- Lock down direct client access on every table added in this migration,
+-- matching the pattern `goals` already used: clients may only SELECT
+-- (needed for the initial fetch + realtime subscriptions), all writes go
+-- through server functions using the service-role key, which bypasses RLS
+-- entirely. Without this, Supabase's default anon/authenticated grants
+-- would let anyone holding the public anon key (always extractable from
+-- the frontend bundle) read every chat message, edit/delete automations,
+-- or — worst case — insert themselves straight into `admins` and grant
+-- themselves full admin access, bypassing every server-side check.
+alter table automations enable row level security;
+create policy "Public read (single-tenant)" on automations for select using (true);
+
+alter table automation_runs enable row level security;
+create policy "Public read (single-tenant)" on automation_runs for select using (true);
+
+alter table chat_messages enable row level security;
+create policy "Public read (single-tenant)" on chat_messages for select using (true);
+
+-- admins gets NO client-readable policy at all: it should never be
+-- fetched directly from the browser, and must never be writable by
+-- anon/authenticated under any circumstance.
+alter table admins enable row level security;

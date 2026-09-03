@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { BadgeCheck, Bell, Blocks, ShieldCheck, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -7,7 +7,8 @@ import { GlassCard } from "@/components/aduf/liquid";
 import { ModelKeysPanel } from "@/components/aduf/model-keys-panel";
 import { SkillsPanel } from "@/components/aduf/skills-panel";
 import { useAduf } from "@/store/aduf-store";
-import { fetchConnectorStatuses } from "@/lib/server-fns";
+import { useAuth } from "@/store/auth-store";
+import { checkIsAdminFn, fetchConnectorStatuses } from "@/lib/server-fns";
 
 /** Providers with a real OAuth redirect flow (see src/lib/server/oauth-providers.ts).
  *  Everything else (currently just Paystack, which is key-based) keeps the
@@ -50,9 +51,25 @@ const CONNECTOR_ERROR_COPY: Record<string, string> = {
 
 function SettingsPage() {
   const { sources, connectSource, setSourceConnected, userName, setUserName } = useAduf();
+  const { accessToken, status } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
   const [pouring, setPouring] = useState<string | null>(null);
   const [configured, setConfigured] = useState<Record<string, boolean>>({});
   const [banner, setBanner] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+
+  // Only shows the Admin Panel link if this signed-in user is actually on
+  // the server-side admin allowlist — the link's absence isn't security by
+  // itself (the /admin route re-checks server-side too), just avoids
+  // showing a dead end to everyone else.
+  useEffect(() => {
+    if (status !== "signed-in" || !accessToken) {
+      setIsAdmin(false);
+      return;
+    }
+    checkIsAdminFn({ data: { accessToken } })
+      .then((res) => setIsAdmin(res.isAdmin))
+      .catch(() => setIsAdmin(false));
+  }, [status, accessToken]);
 
   // Pull real connection state + which providers have OAuth apps registered.
   useEffect(() => {
@@ -114,6 +131,22 @@ function SettingsPage() {
     <AppShell>
       <div className="mx-auto w-full max-w-md px-4 pt-4 pb-24 lg:max-w-[1500px] lg:px-6 lg:py-8">
         <PageHeader eyebrow="Settings" title="You & your stack" />
+
+        {isAdmin ? (
+          <Link to="/admin" className="mb-4 block">
+            <GlassCard className="flex items-center gap-3 p-4">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-cyan/15 text-cyan">
+                <ShieldCheck className="h-4.5 w-4.5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Admin Panel</p>
+                <p className="text-xs text-muted-foreground">
+                  Manage users, admins, and workspace-wide stats
+                </p>
+              </div>
+            </GlassCard>
+          </Link>
+        ) : null}
 
         {banner ? (
           <GlassCard

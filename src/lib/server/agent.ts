@@ -56,6 +56,14 @@ const proposedActionSchema = z.discriminatedUnion("type", [
     enabled: z.boolean(),
     reasoning: z.string().min(1).max(400),
   }),
+  z.object({
+    type: z.literal("create_automation"),
+    name: z.string().min(1).max(80),
+    trigger: z.string().min(1).max(200),
+    action: z.string().min(1).max(200),
+    goalTitle: z.string().max(120).optional(),
+    reasoning: z.string().min(1).max(400),
+  }),
 ]);
 
 /** A tool the agent can invoke mid-reply instead of guessing — currently
@@ -190,14 +198,39 @@ freely whenever it's the right next step, but only when you actually have
 what a real goal or automation needs (a concrete title and target; a
 specific channel and on/off state) — if you don't, ask a "question" instead
 and propose once you know. Never set "question" and "proposedAction" on the
-same reply. Two shapes exist today:
+same reply. Three shapes exist today:
 - {"type": "create_goal", "title": string, "target": number, "currency": string, "reasoning": string} —
   currency is "₦" (or another symbol) for money goals, "" for a plain count
   (bookings, signups, etc). "reasoning" is one short sentence the owner
   reads on the approval card explaining why this goal, shown to them, not
   hidden reasoning.
 - {"type": "toggle_automation", "channelId": "website"|"whatsapp"|"crm"|"payments"|"ads"|"email", "enabled": boolean, "reasoning": string} —
-  propose this to turn a channel automation on or off with a clear reason.
+  propose this to turn one of the 6 built-in channel automations on or off
+  with a clear reason.
+- {"type": "create_automation", "name": string, "trigger": string, "action": string, "goalTitle": string (optional), "reasoning": string} —
+  propose this to build a genuinely new automation that isn't one of the 6
+  built-in channels (e.g. a specific workflow the owner described). "trigger"
+  is what starts it in plain language, "action" is what it actually does.
+  Set "goalTitle" to an existing goal's exact title if this automation's
+  results should feed that goal's progress (e.g. a revenue-producing
+  automation linked to a sales goal) — leave it unset if there's no
+  matching goal yet.
+
+=== Formatting: use tables for structured answers ===
+Start every reply with 1-2 plain sentences, no jargon. Then, if the answer
+has structured data — a comparison, specs/settings, a list of steps, or
+pros/cons — put that part in a markdown table instead of prose, since it's
+far easier to scan on a small screen:
+- Comparing 2-3 things: | Feature | Option A | Option B |
+- Facts/specs/settings: | **Label** | Value |
+- Steps/process: | Step | What to do |
+- Pros/cons: | Pros | Cons |
+Cap tables at 6 rows — if there's more, show the top 6 and say "and N
+more...". Keep each cell to one line, use **bold** for row labels, and
+never build a table wider than 4 columns. Close with at most one follow-up
+question. Skip the table entirely for a reply that's simple prose with
+nothing structured in it — don't force data into a table that doesn't have
+any.
 
 === Tool execution: toolCall ===
 When actually getting the answer right requires running code — a real
@@ -218,7 +251,7 @@ owner's real data, only to compute/verify something.
 
 Respond with ONLY a single JSON object, no markdown fences, no prose outside
 it, matching exactly:
-{"reply": string, "question": {"prompt": string, "multi": boolean, "options": [{"id": string, "label": string, "value": string}]} | null, "document": {"filename": string, "format": "txt"|"md"|"docx"|"pdf", "content": string} | null, "analysis": {"summary": string, "findings": [{"area": "visibility"|"credibility"|"customer_journey"|"conversion"|"sales"|"retention"|"operations"|"local_presence"|"search_ai_visibility", "problem": string, "severity": "low"|"medium"|"high"|"critical", "rootCauses": string[], "opportunities": string[], "recommendedActions": string[], "estimatedImpact": string, "automationPossible": boolean, "automationNotes": string, "expertRequired": boolean, "expertType": string}]} | null, "proposedAction": {"type": "create_goal", "title": string, "target": number, "currency": string, "reasoning": string} | {"type": "toggle_automation", "channelId": "website"|"whatsapp"|"crm"|"payments"|"ads"|"email", "enabled": boolean, "reasoning": string} | null, "toolCall": {"type": "run_code", "language": "python"|"javascript"|"bash", "code": string, "purpose": string} | null}`;
+{"reply": string, "question": {"prompt": string, "multi": boolean, "options": [{"id": string, "label": string, "value": string}]} | null, "document": {"filename": string, "format": "txt"|"md"|"docx"|"pdf", "content": string} | null, "analysis": {"summary": string, "findings": [{"area": "visibility"|"credibility"|"customer_journey"|"conversion"|"sales"|"retention"|"operations"|"local_presence"|"search_ai_visibility", "problem": string, "severity": "low"|"medium"|"high"|"critical", "rootCauses": string[], "opportunities": string[], "recommendedActions": string[], "estimatedImpact": string, "automationPossible": boolean, "automationNotes": string, "expertRequired": boolean, "expertType": string}]} | null, "proposedAction": {"type": "create_goal", "title": string, "target": number, "currency": string, "reasoning": string} | {"type": "toggle_automation", "channelId": "website"|"whatsapp"|"crm"|"payments"|"ads"|"email", "enabled": boolean, "reasoning": string} | {"type": "create_automation", "name": string, "trigger": string, "action": string, "goalTitle": string, "reasoning": string} | null, "toolCall": {"type": "run_code", "language": "python"|"javascript"|"bash", "code": string, "purpose": string} | null}`;
 
 /** Max code-execution round trips inside a single reply — bounds latency
  *  and cost; almost every reply that needs a tool call needs it once. */

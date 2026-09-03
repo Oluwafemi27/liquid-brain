@@ -1,6 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUpRight, Mic, Paperclip, Plug, Plus, Send, Target } from "lucide-react";
+import {
+  ArrowUpRight,
+  History,
+  Mic,
+  Paperclip,
+  Plug,
+  Plus,
+  Send,
+  SquarePen,
+  Target,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { AppShell } from "@/components/aduf/app-shell";
 import { GlassCard, ProgressRing } from "@/components/aduf/liquid";
@@ -10,7 +20,8 @@ import { AgentProposedAction } from "@/components/aduf/agent-proposed-action";
 import { AgentTracePanel } from "@/components/aduf/agent-trace";
 import { ChatAttachmentCard } from "@/components/aduf/chat-attachment";
 import { AdufAnalysisCard } from "@/components/aduf/aduf-analysis-card";
-import { useAduf } from "@/store/aduf-store";
+import { SESSION_STORAGE_KEY, useAduf } from "@/store/aduf-store";
+import { fetchChatHistoryFn, listChatSessionsFn } from "@/lib/server-fns";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -178,13 +189,20 @@ function BrainPage() {
     userName,
     messages,
     thinking,
+    sessionId,
     sendMessage,
+    setMessages,
+    startNewChat,
     answerQuestion,
     approveProposedAction,
     dismissProposedAction,
   } = useAduf();
   const [draft, setDraft] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [recentChats, setRecentChats] = useState<
+    Array<{ sessionId: string; preview: string; updatedAt: string }>
+  >([]);
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const hello = useMemo(greeting, []);
@@ -198,6 +216,27 @@ function BrainPage() {
    *  the current in-flight interim guess so each onresult tick can replace
    *  just the interim tail without losing earlier finalized words. */
   const finalizedRef = useRef("");
+
+  // Reload this session's saved messages whenever the active session
+  // changes (first mount, or after "New chat"/"switch chat"). Without
+  // this, the chat always started blank even though messages were being
+  // saved to Supabase the whole time — nothing ever read them back.
+  useEffect(() => {
+    let cancelled = false;
+    fetchChatHistoryFn({ data: { sessionId } })
+      .then((history) => {
+        // Guard against a race where the user already sent a message (or
+        // switched chats again) while this request was in flight — only
+        // apply the fetched history if nothing has happened since.
+        if (!cancelled && history.length > 0 && useAduf.getState().messages.length === 0) {
+          setMessages(history);
+        }
+      })
+      .catch((err) => console.error("[chat] failed to load history", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, setMessages]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -294,13 +333,70 @@ function BrainPage() {
         <InsightFeedCard />
 
         <GlassCard hover={false} className="flex h-[60vh] min-h-[420px] max-h-[640px] flex-col p-0">
-          <div className="flex shrink-0 items-center gap-2 border-b border-border p-4">
+          <div className="relative flex shrink-0 items-center gap-2 border-b border-border p-4">
             <span className="relative flex h-2 w-2">
               <span className="animate-ripple absolute inset-0 rounded-full bg-cyan" />
               <span className="relative h-2 w-2 rounded-full bg-cyan" />
             </span>
             <h2 className="text-sm font-semibold">Brain Chat</h2>
             <span className="ml-auto text-[11px] text-muted-foreground">always on</span>
+            <button
+              onClick={() => {
+                setHistoryOpen((v) => !v);
+                if (!historyOpen) {
+                  listChatSessionsFn()
+                    .then(setRecentChats)
+                    .catch((err) => console.error("[chat] failed to list sessions", err));
+                }
+              }}
+              aria-label="Chat history"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-white/8 hover:text-foreground"
+            >
+              <History className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                startNewChat();
+                setHistoryOpen(false);
+              }}
+              aria-label="Start new chat"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-white/8 hover:text-foreground"
+            >
+              <SquarePen className="h-3.5 w-3.5" />
+            </button>
+
+            {historyOpen ? (
+              <div className="glass absolute right-4 top-full z-20 mt-1 max-h-72 w-72 overflow-y-auto rounded-2xl p-2 shadow-xl">
+                <p className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Recent chats
+                </p>
+                {recentChats.length === 0 ? (
+                  <p className="px-2 py-3 text-xs text-muted-foreground">No previous chats yet.</p>
+                ) : (
+                  recentChats.map((chat) => (
+                    <button
+                      key={chat.sessionId}
+                      onClick={() => {
+                        useAduf.setState({ sessionId: chat.sessionId, messages: [] });
+                        try {
+                          window.localStorage.setItem(SESSION_STORAGE_KEY, chat.sessionId);
+                        } catch {
+                          // Private browsing or storage disabled — the
+                          // switch still works for this tab.
+                        }
+                        setHistoryOpen(false);
+                      }}
+                      className={cn(
+                        "block w-full truncate rounded-xl px-2 py-2 text-left text-xs hover:bg-white/8",
+                        chat.sessionId === sessionId ? "text-foreground" : "text-muted-foreground",
+                      )}
+                    >
+                      {chat.preview || "New conversation"}
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
           </div>
 
           <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
@@ -371,18 +467,20 @@ function BrainPage() {
             ) : null}
           </div>
 
-          <div className="flex shrink-0 flex-wrap gap-2 px-4 pt-3">
-            {suggestions.map((q) => (
-              <button
-                key={q}
-                onClick={() => sendMessage(q)}
-                className="flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-white/8 hover:text-foreground"
-              >
-                {q}
-                <ArrowUpRight className="h-3 w-3" />
-              </button>
-            ))}
-          </div>
+          {messages.length === 0 && !thinking ? (
+            <div className="flex shrink-0 flex-wrap gap-2 px-4 pt-3">
+              {suggestions.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => sendMessage(q)}
+                  className="flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-white/8 hover:text-foreground"
+                >
+                  {q}
+                  <ArrowUpRight className="h-3 w-3" />
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           <form
             onSubmit={(e) => {

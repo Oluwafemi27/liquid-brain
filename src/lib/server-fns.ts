@@ -1,8 +1,26 @@
 import { createServerFn } from "@tanstack/react-start";
-import { setAutomationEnabled, listAutomations } from "@/lib/server/automations";
+import {
+  setAutomationEnabled,
+  listAutomations,
+  createAutomation,
+  runAutomation,
+  listAutomationRuns,
+} from "@/lib/server/automations";
 import { getConnectorStatuses } from "@/lib/server/connectors";
-import { bumpGoal, createGoal, deleteGoal, listGoals, toggleGoalSubTask } from "@/lib/server/goals";
+import {
+  bumpGoal,
+  createGoal,
+  deleteGoal,
+  listGoals,
+  toggleGoalSubTask,
+  updateGoal,
+} from "@/lib/server/goals";
+import {
+  fetchChatHistory as fetchChatHistoryImpl,
+  listChatSessions as listChatSessionsImpl,
+} from "@/lib/server/chat-history";
 import { getSurvey, saveSurvey, verifyAccessToken, type BusinessSurvey } from "@/lib/server/survey";
+import { getAdminOverview, isAdminEmail, listAllUsers, setAdminStatus } from "@/lib/server/admin";
 
 export const fetchConnectorStatuses = createServerFn({ method: "GET" }).handler(async () => {
   return getConnectorStatuses();
@@ -17,9 +35,30 @@ export const fetchAutomations = createServerFn({ method: "GET" }).handler(async 
 });
 
 export const setAutomationEnabledFn = createServerFn({ method: "POST" })
-  .validator((data: { id: import("@/lib/aduf-types").ChannelId; enabled: boolean }) => data)
+  .validator((data: { id: string; enabled: boolean }) => data)
   .handler(async ({ data }) => {
     return setAutomationEnabled(data.id, data.enabled);
+  });
+
+export const createAutomationFn = createServerFn({ method: "POST" })
+  .validator(
+    (data: { name: string; trigger: string; action: string; goalTitle?: string | undefined }) =>
+      data,
+  )
+  .handler(async ({ data }) => {
+    return createAutomation(data);
+  });
+
+export const runAutomationFn = createServerFn({ method: "POST" })
+  .validator((data: { automationId: string }) => data)
+  .handler(async ({ data }) => {
+    return runAutomation(data.automationId);
+  });
+
+export const listAutomationRunsFn = createServerFn({ method: "POST" })
+  .validator((data: { automationId: string }) => data)
+  .handler(async ({ data }) => {
+    return listAutomationRuns(data.automationId);
   });
 
 export const createGoalFn = createServerFn({ method: "POST" })
@@ -33,6 +72,26 @@ export const bumpGoalFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return bumpGoal(data.goalId, data.amount);
   });
+
+export const updateGoalFn = createServerFn({ method: "POST" })
+  .validator(
+    (data: { goalId: string; title?: string; target?: number; currency?: string; due?: string }) =>
+      data,
+  )
+  .handler(async ({ data }) => {
+    const { goalId, ...patch } = data;
+    return updateGoal(goalId, patch);
+  });
+
+export const fetchChatHistoryFn = createServerFn({ method: "POST" })
+  .validator((data: { sessionId: string }) => data)
+  .handler(async ({ data }) => {
+    return fetchChatHistoryImpl(data.sessionId);
+  });
+
+export const listChatSessionsFn = createServerFn({ method: "GET" }).handler(async () => {
+  return listChatSessionsImpl();
+});
 
 export const toggleGoalSubTaskFn = createServerFn({ method: "POST" })
   .validator((data: { goalId: string; taskId: string }) => data)
@@ -65,4 +124,29 @@ export const submitSurvey = createServerFn({ method: "POST" })
     if (!user) throw new Error("Not signed in.");
     await saveSurvey(user.id, user.email, data.survey);
     return { ok: true as const };
+  });
+
+export const checkIsAdminFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    return { isAdmin: await isAdminEmail(user?.email) };
+  });
+
+export const adminListUsersFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string }) => data)
+  .handler(async ({ data }) => {
+    return listAllUsers(data.accessToken);
+  });
+
+export const adminOverviewFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string }) => data)
+  .handler(async ({ data }) => {
+    return getAdminOverview(data.accessToken);
+  });
+
+export const adminSetAdminStatusFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string; targetEmail: string; makeAdmin: boolean }) => data)
+  .handler(async ({ data }) => {
+    return setAdminStatus(data.accessToken, data.targetEmail, data.makeAdmin);
   });

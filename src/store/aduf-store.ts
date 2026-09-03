@@ -20,13 +20,36 @@ import { useAuth } from "@/store/auth-store";
 import {
   bumpGoalFn,
   createGoalFn,
+  createAutomationFn,
+  fetchChatHistoryFn,
+  runAutomationFn,
   setAutomationEnabledFn,
   toggleGoalSubTaskFn,
+  updateGoalFn,
 } from "@/lib/server-fns";
 
-function makeSessionId() {
+export const SESSION_STORAGE_KEY = "aduf-chat-session-id";
+
+function generateSessionId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `session-${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+}
+
+/** Reuses the session id saved from last time (so a page reload keeps
+ *  showing the same conversation instead of silently starting a fresh,
+ *  empty one) or creates and saves a new one. SSR-safe: falls back to a
+ *  throwaway id when window/localStorage aren't available. */
+function makeSessionId() {
+  if (typeof window === "undefined") return generateSessionId();
+  try {
+    const existing = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    if (existing) return existing;
+    const fresh = generateSessionId();
+    window.localStorage.setItem(SESSION_STORAGE_KEY, fresh);
+    return fresh;
+  } catch {
+    return generateSessionId();
+  }
 }
 
 const MONEY_GOAL_PATTERN = /[₦$€£]|\b(sales|revenue|mrr|income|earn(ings)?|profit)\b/i;
@@ -57,13 +80,31 @@ interface AdufState {
   insights: Insight[];
   scheduleEvents: ScheduleEvent[];
   setUserName: (name: string) => void;
-  toggleAutomation: (id: ChannelId) => void;
+  toggleAutomation: (id: string) => void;
   setAutomations: (automations: Automation[]) => void;
   upsertAutomation: (automation: Automation) => void;
-  removeAutomation: (id: ChannelId) => void;
+  removeAutomation: (id: string) => void;
+  /** Creates a brand-new automation (not one of the 6 built-ins) — used by
+   *  approved "create_automation" proposed actions from the agent. */
+  createAutomation: (input: {
+    name: string;
+    trigger: string;
+    action: string;
+    goalTitle?: string | undefined;
+  }) => void;
+  /** Runs an automation's get-data -> process-data -> send-action pipeline
+   *  right now, logging the result and (if goal-linked) recording it into
+   *  that goal's progress. */
+  runAutomation: (automationId: string) => void;
   toggleSubTask: (goalId: string, taskId: string) => void;
   bumpGoal: (goalId: string, amount: number) => void;
   addGoal: (title: string, target: number) => void;
+  /** Edits a goal's title/target/due date directly — what the Goals page's
+   *  "Edit Plan" button calls. */
+  updateGoal: (
+    goalId: string,
+    patch: { title?: string; target?: number; currency?: string; due?: string },
+  ) => void;
   /** Replaces the whole goals list — used to hydrate from Supabase on load. */
   setGoals: (goals: Goal[]) => void;
   /** Inserts or replaces a single goal by id — used by the realtime subscription. */
@@ -72,6 +113,14 @@ interface AdufState {
   connectSource: (id: string) => void;
   setSourceConnected: (id: string, connected: boolean) => void;
   sendMessage: (text: string) => void;
+  /** Replaces the whole messages list — used to hydrate a session's saved
+   *  history from Supabase on load. */
+  setMessages: (messages: ChatMessage[]) => void;
+  /** Starts a brand-new conversation: generates a fresh session id, saves
+   *  it as the current one, and clears the visible message list. The old
+   *  conversation isn't deleted — it stays in Supabase under its old
+   *  session id and can be reopened via the chat history switcher. */
+  startNewChat: () => void;
   /** Records the user's pick(s) for a questionnaire message, then sends
    *  their choice back into the conversation as the next user turn. */
   answerQuestion: (messageId: string, values: string[], label: string) => void;
@@ -133,6 +182,49 @@ export const useAduf = create<AdufState>((set, get) => ({
 
   setAutomations: (automations) => set({ automations }),
 
+  createAutomation: (input) => {
+    createAutomationFn({ data: input })
+      .then((automation) => {
+        if (!automation) return;
+        get().upsertAutomation(automation);
+        set((s) => ({
+          insights: [
+            makeInsight({
+              title: `New automation live: ${automation.name}`,
+              body: `ADUF set this up on the Automation Grid. It'll run on: ${automation.trigger}.`,
+              severity: "success",
+              source: "Automations",
+            }),
+            ...s.insights,
+          ],
+        }));
+      })
+      .catch((err) => console.error("[automations] createAutomation failed", err));
+  },
+
+  runAutomation: (automationId) => {
+    runAutomationFn({ data: { automationId } })
+      .then((run) => {
+        if (!run) return;
+        // Refresh the automation itself (run count, and its linked goal's
+        // progress will already have moved server-side) via the realtime
+        // subscription — nothing else to do client-side here beyond
+        // surfacing what happened.
+        set((s) => ({
+          insights: [
+            makeInsight({
+              title: run.status === "success" ? "Automation ran" : "Automation run failed",
+              body: run.summary,
+              severity: run.status === "success" ? "success" : "warning",
+              source: "Automations",
+            }),
+            ...s.insights,
+          ],
+        }));
+      })
+      .catch((err) => console.error("[automations] runAutomation failed", err));
+  },
+
   upsertAutomation: (automation) =>
     set((s) => {
       const exists = s.automations.some((item) => item.id === automation.id);
@@ -180,6 +272,14 @@ export const useAduf = create<AdufState>((set, get) => ({
         }
       })
       .catch((err) => console.error("[goals] bumpGoal failed", err));
+  },
+
+  updateGoal: (goalId, patch) => {
+    updateGoalFn({ data: { goalId, ...patch } })
+      .then((updated) => {
+        if (updated) get().upsertGoal(updated);
+      })
+      .catch((err) => console.error("[goals] updateGoal failed", err));
   },
 
   addGoal: (title, target) => {
@@ -235,6 +335,21 @@ export const useAduf = create<AdufState>((set, get) => ({
 
   setSourceConnected: (id, connected) =>
     set((s) => ({ sources: s.sources.map((d) => (d.id === id ? { ...d, connected } : d)) })),
+
+  setMessages: (messages) => set({ messages }),
+
+  startNewChat: () => {
+    const fresh = generateSessionId();
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(SESSION_STORAGE_KEY, fresh);
+      } catch {
+        // Ignore storage failures (e.g. private browsing) — the new
+        // session id still works for this tab even if it won't persist.
+      }
+    }
+    set({ sessionId: fresh, messages: [] });
+  },
 
   sendMessage: (text) => {
     const trimmed = text.trim();
@@ -358,6 +473,17 @@ export const useAduf = create<AdufState>((set, get) => ({
       if (current && current.enabled !== action.enabled) {
         get().toggleAutomation(action.channelId);
       }
+    } else if (action.type === "create_automation") {
+      // Inserts a real, brand-new automation — this is the path that was
+      // entirely missing before: the agent could only toggle one of the 6
+      // built-in channels, never create something new. The Grid page picks
+      // it up automatically via its realtime subscription.
+      get().createAutomation({
+        name: action.name,
+        trigger: action.trigger,
+        action: action.action,
+        goalTitle: action.goalTitle,
+      });
     }
   },
 

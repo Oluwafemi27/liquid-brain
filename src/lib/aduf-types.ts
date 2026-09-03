@@ -20,13 +20,46 @@ export interface Goal {
 export type ChannelId = "website" | "whatsapp" | "crm" | "payments" | "ads" | "email";
 
 export interface Automation {
-  id: ChannelId;
+  /** Stable identifier. The original 6 built-in channel automations use
+   *  their ChannelId directly (e.g. "website"); AI-created automations get
+   *  a generated id (e.g. "auto-<uuid>") since they aren't tied to one of
+   *  the fixed channels. */
+  id: string;
   name: string;
   enabled: boolean;
   trigger: string;
   action: string;
   goal: string;
   runs: number;
+  /** Which of the 6 built-in channels this automation belongs to, purely
+   *  for icon selection on the Grid page. Undefined for AI-created
+   *  automations that don't map to one — they fall back to a generic icon. */
+  channel?: ChannelId | undefined;
+  /** "builtin" automations are the 6 seeded channel toggles; "ai" ones were
+   *  created by the agent after the owner approved a proposed action. */
+  source: "builtin" | "ai";
+  /** How this automation actually runs when triggered: fetch data, run it
+   *  through a transform, then take an action — the n8n-style pipeline. */
+  steps?: AutomationStep[] | undefined;
+  /** id of the goal this automation's results feed into, if any — set when
+   *  the automation's action updates a goal's progress. */
+  goalId?: string | undefined;
+}
+
+export interface AutomationStep {
+  kind: "get_data" | "process_data" | "send_action";
+  label: string;
+}
+
+export interface AutomationRun {
+  id: string;
+  automationId: string;
+  startedAt: string;
+  status: "success" | "error";
+  summary: string;
+  /** Value extracted from this run (e.g. revenue detected), if any — this
+   *  is what gets written into the linked goal's progress. */
+  value?: number | undefined;
 }
 
 export interface MemoryNode {
@@ -112,7 +145,23 @@ export interface ProposedAutomationAction {
   reasoning: string;
 }
 
-export type ProposedAction = ProposedGoalAction | ProposedAutomationAction;
+/** A brand-new automation the agent wants to create — not one of the 6
+ *  built-in channels. Approving it inserts a real row into `automations`
+ *  so it shows up on the Grid page like any other, and can optionally be
+ *  wired to a goal so its runs feed that goal's progress. */
+export interface ProposedCreateAutomationAction {
+  type: "create_automation";
+  name: string;
+  trigger: string;
+  action: string;
+  /** Title of an existing goal to link this automation's output to, or
+   *  undefined if it isn't tied to a specific goal. */
+  goalTitle?: string | undefined;
+  reasoning: string;
+}
+
+export type ProposedAction =
+  ProposedGoalAction | ProposedAutomationAction | ProposedCreateAutomationAction;
 
 export type ProposedActionStatus = "pending" | "approved" | "dismissed";
 
@@ -121,20 +170,20 @@ export interface ChatMessage {
   role: "user" | "aduf";
   text: string;
   /** Present when the agent wants the user to pick from options. */
-  question?: ChatQuestion;
+  question?: ChatQuestion | undefined;
   /** Option value(s) the user already picked, once a question is answered. */
-  answeredValues?: string[];
+  answeredValues?: string[] | undefined;
   /** Visible-on-demand trace of what the agent did to produce this reply. */
-  trace?: AgentTraceStep[];
+  trace?: AgentTraceStep[] | undefined;
   /** Files the agent created while producing this reply — previewable and
    *  downloadable from the chat. */
-  attachments?: ChatAttachment[];
+  attachments?: ChatAttachment[] | undefined;
   /** Present when this reply is a structured ADUF business diagnosis. */
-  analysis?: AdufAnalysis;
+  analysis?: AdufAnalysis | undefined;
   /** Present when the agent is proposing a concrete change to another page
    *  (a goal to create, an automation to flip) that needs the owner's
    *  explicit approval before it takes effect anywhere. */
-  proposedAction?: ProposedAction;
+  proposedAction?: ProposedAction | undefined;
   proposedActionStatus?: ProposedActionStatus;
 }
 
