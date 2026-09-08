@@ -9,9 +9,11 @@ import {
   Megaphone,
   MessageCircle,
   Play,
+  Power,
   Radio,
+  Workflow,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import automationCore from "@/assets/automation-core.png";
 import liveFeed from "@/assets/automation-live-feed.webp";
 import { AppShell, PageHeader } from "@/components/aduf/app-shell";
@@ -87,7 +89,16 @@ export const Route = createFileRoute("/automations")({
 });
 
 function AutomationsPage() {
-  const { automations, toggleAutomation, runAutomation, insights } = useAduf();
+  // n8nDeployments is loaded and kept live globally by AutomationsBootstrap
+  // (mounted in AppShell) — no per-page fetch needed here.
+  const {
+    automations,
+    toggleAutomation,
+    runAutomation,
+    insights,
+    n8nDeployments,
+    activateN8nDeployment,
+  } = useAduf();
   const [open, setOpen] = useState<string | null>(null);
   const active = automations.find((a) => a.id === open) ?? null;
   const liveCount = automations.filter((a) => a.enabled).length;
@@ -386,6 +397,65 @@ function AutomationsPage() {
             </div>
           </div>
         </GlassCard>
+
+        {/* n8n Workflows — Safe Mode: every deploy lands here inactive until
+           the owner explicitly taps "Turn it on". */}
+        {n8nDeployments.length > 0 ? (
+          <GlassCard hover={false} className="mt-6 rounded-2xl p-5 sm:p-6">
+            <div className="flex items-center gap-2">
+              <Workflow className="h-4 w-4 text-cyan" />
+              <h2 className="text-sm font-semibold">n8n Workflows</h2>
+            </div>
+            <div className="mt-4 space-y-3">
+              {n8nDeployments.map((d) => (
+                <div
+                  key={d.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 p-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-medium">{d.name}</p>
+                      <span className="shrink-0 rounded-full bg-white/8 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        via n8n · {d.builtFrom === "template" ? "from library" : "built fresh"}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">{d.reasoning}</p>
+                    {d.status === "error" ? (
+                      <p className="mt-1 text-xs text-amber-400">
+                        {d.lastError ?? "Deploy failed"}
+                      </p>
+                    ) : d.status === "inactive" || d.status === "draft" ? (
+                      <p className="mt-1 text-xs text-cyan">I built it. Want me to turn it on?</p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-[10px] font-medium uppercase tracking-wider",
+                        d.status === "active"
+                          ? "border-cyan/40 text-cyan"
+                          : d.status === "error"
+                            ? "border-amber-400/40 text-amber-400"
+                            : "border-border text-muted-foreground",
+                      )}
+                    >
+                      {d.status === "active" ? "Live" : d.status === "error" ? "Failed" : "Off"}
+                    </span>
+                    {d.status === "inactive" || d.status === "draft" ? (
+                      <button
+                        onClick={() => activateN8nDeployment(d.id)}
+                        className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium"
+                        style={{ background: "var(--gradient-accent)", color: "var(--background)" }}
+                      >
+                        <Power className="h-3 w-3" /> Turn it on
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+        ) : null}
       </div>
     </AppShell>
   );

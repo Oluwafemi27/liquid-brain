@@ -22,6 +22,7 @@ import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiDocumentsRouteImport } from './routes/api/documents'
 import { Route as ApiFxRouteImport } from './routes/api/fx'
 import { Route as ApiModelKeysRouteImport } from './routes/api/model-keys'
+import { Route as ApiN8nConnectionRouteImport } from './routes/api/n8n-connection'
 import { Route as ApiSkillsRouteImport } from './routes/api/skills'
 import { Route as ApiDocumentsConvertRouteImport } from './routes/api/documents/convert'
 import { Route as ApiDocumentsUploadRouteImport } from './routes/api/documents/upload'
@@ -98,6 +99,11 @@ const ApiModelKeysRoute = ApiModelKeysRouteImport.update({
   path: '/api/model-keys',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiN8nConnectionRoute = ApiN8nConnectionRouteImport.update({
+  id: '/api/n8n-connection',
+  path: '/api/n8n-connection',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSkillsRoute = ApiSkillsRouteImport.update({
   id: '/api/skills',
   path: '/api/skills',
@@ -165,6 +171,7 @@ export interface FileRoutesByFullPath {
   '/api/documents': typeof ApiDocumentsRouteWithChildren
   '/api/fx': typeof ApiFxRoute
   '/api/model-keys': typeof ApiModelKeysRoute
+  '/api/n8n-connection': typeof ApiN8nConnectionRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/upload': typeof ApiDocumentsUploadRoute
@@ -190,6 +197,7 @@ export interface FileRoutesByTo {
   '/api/documents': typeof ApiDocumentsRouteWithChildren
   '/api/fx': typeof ApiFxRoute
   '/api/model-keys': typeof ApiModelKeysRoute
+  '/api/n8n-connection': typeof ApiN8nConnectionRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/upload': typeof ApiDocumentsUploadRoute
@@ -216,6 +224,7 @@ export interface FileRoutesById {
   '/api/documents': typeof ApiDocumentsRouteWithChildren
   '/api/fx': typeof ApiFxRoute
   '/api/model-keys': typeof ApiModelKeysRoute
+  '/api/n8n-connection': typeof ApiN8nConnectionRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/upload': typeof ApiDocumentsUploadRoute
@@ -243,6 +252,7 @@ export interface FileRouteTypes {
     | '/api/documents'
     | '/api/fx'
     | '/api/model-keys'
+    | '/api/n8n-connection'
     | '/api/skills'
     | '/api/documents/convert'
     | '/api/documents/upload'
@@ -268,6 +278,7 @@ export interface FileRouteTypes {
     | '/api/documents'
     | '/api/fx'
     | '/api/model-keys'
+    | '/api/n8n-connection'
     | '/api/skills'
     | '/api/documents/convert'
     | '/api/documents/upload'
@@ -293,6 +304,7 @@ export interface FileRouteTypes {
     | '/api/documents'
     | '/api/fx'
     | '/api/model-keys'
+    | '/api/n8n-connection'
     | '/api/skills'
     | '/api/documents/convert'
     | '/api/documents/upload'
@@ -319,6 +331,7 @@ export interface RootRouteChildren {
   ApiDocumentsRoute: typeof ApiDocumentsRouteWithChildren
   ApiFxRoute: typeof ApiFxRoute
   ApiModelKeysRoute: typeof ApiModelKeysRoute
+  ApiN8nConnectionRoute: typeof ApiN8nConnectionRoute
   ApiSkillsRoute: typeof ApiSkillsRouteWithChildren
   ApiSandboxRunRoute: typeof ApiSandboxRunRoute
   ApiTasksRunRoute: typeof ApiTasksRunRoute
@@ -417,6 +430,13 @@ declare module '@tanstack/react-router' {
       path: '/api/model-keys'
       fullPath: '/api/model-keys'
       preLoaderRoute: typeof ApiModelKeysRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/n8n-connection': {
+      id: '/api/n8n-connection'
+      path: '/api/n8n-connection'
+      fullPath: '/api/n8n-connection'
+      preLoaderRoute: typeof ApiN8nConnectionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/skills': {
@@ -536,6 +556,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDocumentsRoute: ApiDocumentsRouteWithChildren,
   ApiFxRoute: ApiFxRoute,
   ApiModelKeysRoute: ApiModelKeysRoute,
+  ApiN8nConnectionRoute: ApiN8nConnectionRoute,
   ApiSkillsRoute: ApiSkillsRouteWithChildren,
   ApiSandboxRunRoute: ApiSandboxRunRoute,
   ApiTasksRunRoute: ApiTasksRunRoute,

@@ -1,8 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { BarChart3, Check, Plus, Target, Trophy } from "lucide-react";
+import { BarChart3, Check, Plus, Target, Trash2, Trophy, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  PolarAngleAxis,
+  RadialBar,
+  RadialBarChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { AppShell, PageHeader } from "@/components/aduf/app-shell";
 import { GlassCard, WaterOrb } from "@/components/aduf/liquid";
 import { formatUsd, toUsd, useUsdRates } from "@/lib/currency";
@@ -28,7 +42,7 @@ export const Route = createFileRoute("/goals")({
 });
 
 function GoalsPage() {
-  const { goals, toggleSubTask, bumpGoal, addGoal, updateGoal } = useAduf();
+  const { goals, toggleSubTask, bumpGoal, addGoal, updateGoal, deleteGoal } = useAduf();
   const { rates } = useUsdRates();
   const formatGoalAmount = (amount: number, currency: string) =>
     currency ? formatUsd(toUsd(amount, currency, rates)) : amount.toLocaleString();
@@ -41,6 +55,12 @@ function GoalsPage() {
   // target on every click regardless of what actually happened.
   const [loggingGoalId, setLoggingGoalId] = useState<string | null>(null);
   const [logAmount, setLogAmount] = useState("");
+
+  // Which goal is showing its "delete this?" confirmation in place of the
+  // usual action row. Deleting is real — it calls the server and removes
+  // the goal for every session, so it's confirmed inline rather than fired
+  // straight off the trash icon.
+  const [deletingGoalId, setDeletingGoalId] = useState<string | null>(null);
 
   // The goal currently open in the Edit Plan modal, plus its draft fields.
   // Previously this button had no handler at all.
@@ -89,10 +109,16 @@ function GoalsPage() {
     ? Math.round(goals.reduce((sum, g) => sum + Math.min(100, goalPct(g)), 0) / goals.length)
     : 0;
   const healthBuckets = [
-    { label: "Completed", count: completed.length, color: "bg-emerald-300" },
-    { label: "In progress", count: inProgress.length, color: "bg-cyan-300" },
-    { label: "Not started", count: notStarted.length, color: "bg-white/25" },
+    { label: "Completed", count: completed.length, color: "bg-emerald-300", hex: "#6ee7b7" },
+    { label: "In progress", count: inProgress.length, color: "bg-cyan-300", hex: "#67e8f9" },
+    {
+      label: "Not started",
+      count: notStarted.length,
+      color: "bg-white/25",
+      hex: "rgba(255,255,255,0.25)",
+    },
   ].filter((b) => b.count > 0);
+  const radialData = [{ name: "Completion", value: avgCompletion, fill: "var(--chart-1)" }];
   const goalAnalytics = useMemo(
     () =>
       goals.map((goal) => ({
@@ -215,6 +241,13 @@ function GoalsPage() {
             const complete = pct >= 100;
             return (
               <GlassCard key={goal.id} delay={i * 0.06} className="flex flex-col">
+                <button
+                  onClick={() => setDeletingGoalId(goal.id)}
+                  aria-label={`Delete goal ${goal.title}`}
+                  className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-full text-muted-foreground/70 transition-colors hover:bg-rose-400/15 hover:text-rose-300"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
                 <div className="flex flex-col items-center text-center">
                   <WaterOrb fill={pct} size={144} burst={complete}>
                     <span className="font-display text-2xl font-semibold sm:text-3xl">{pct}%</span>
@@ -254,7 +287,29 @@ function GoalsPage() {
                 </ul>
 
                 <div className="mt-4 flex flex-col gap-2">
-                  {loggingGoalId === goal.id ? (
+                  {deletingGoalId === goal.id ? (
+                    <div className="flex items-center gap-2 rounded-2xl border border-rose-400/25 bg-rose-400/8 px-3 py-2">
+                      <p className="flex-1 text-xs text-rose-200">
+                        Delete "{goal.title}"? This can't be undone.
+                      </p>
+                      <button
+                        onClick={() => setDeletingGoalId(null)}
+                        aria-label="Cancel"
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-white/8"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDeletingGoalId(null);
+                          void deleteGoal(goal.id);
+                        }}
+                        className="shrink-0 rounded-full bg-rose-400/90 px-3 py-1.5 text-xs font-medium text-background hover:bg-rose-400"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ) : loggingGoalId === goal.id ? (
                     <form
                       onSubmit={(e) => {
                         e.preventDefault();
@@ -372,33 +427,87 @@ function GoalsPage() {
             ) : null}
 
             {healthBuckets.length > 0 ? (
-              <GlassCard className="p-5">
-                <div className="flex items-center gap-2">
-                  <Target className="h-4 w-4 text-violet-300" />
-                  <h3 className="text-sm font-semibold">Goal breakdown</h3>
-                </div>
-                <div className="mt-5 space-y-5">
-                  {healthBuckets.map((bucket) => {
-                    const width = `${Math.round((bucket.count / goals.length) * 100)}%`;
-                    return (
-                      <div key={bucket.label}>
-                        <div className="mb-2 flex justify-between text-xs">
-                          <span>{bucket.label}</span>
-                          <span className="text-muted-foreground">
-                            {bucket.count} {bucket.count === 1 ? "goal" : "goals"}
-                          </span>
-                        </div>
-                        <div className="h-2 rounded-full bg-white/8">
-                          <div
-                            className={`h-full rounded-full ${bucket.color}`}
-                            style={{ width }}
-                          />
-                        </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <GlassCard className="p-5">
+                  <div className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-violet-300" />
+                    <h3 className="text-sm font-semibold">Goal breakdown</h3>
+                  </div>
+                  <div className="h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={healthBuckets}
+                          dataKey="count"
+                          nameKey="label"
+                          innerRadius="58%"
+                          outerRadius="82%"
+                          paddingAngle={healthBuckets.length > 1 ? 3 : 0}
+                          animationDuration={600}
+                        >
+                          {healthBuckets.map((bucket) => (
+                            <Cell key={bucket.label} fill={bucket.hex} stroke="none" />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            background: "var(--popover)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 12,
+                            color: "var(--foreground)",
+                          }}
+                          formatter={(value: number, name: string) => [
+                            `${value} ${value === 1 ? "goal" : "goals"}`,
+                            name,
+                          ]}
+                        />
+                        <Legend
+                          verticalAlign="bottom"
+                          height={28}
+                          formatter={(value: string) => (
+                            <span className="text-xs text-muted-foreground">{value}</span>
+                          )}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </GlassCard>
+
+                <GlassCard className="p-5">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-amber-300" />
+                    <h3 className="text-sm font-semibold">Average completion</h3>
+                  </div>
+                  <div className="relative h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadialBarChart
+                        data={radialData}
+                        startAngle={90}
+                        endAngle={-270}
+                        innerRadius="70%"
+                        outerRadius="100%"
+                        barSize={14}
+                      >
+                        <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
+                        <RadialBar
+                          dataKey="value"
+                          cornerRadius={8}
+                          background={{ fill: "rgba(255,255,255,0.08)" }}
+                          animationDuration={700}
+                        />
+                      </RadialBarChart>
+                    </ResponsiveContainer>
+                    <div className="pointer-events-none absolute inset-0 grid place-items-center">
+                      <div className="text-center">
+                        <p className="font-display text-3xl font-semibold">{avgCompletion}%</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          across {goals.length} {goals.length === 1 ? "goal" : "goals"}
+                        </p>
                       </div>
-                    );
-                  })}
-                </div>
-              </GlassCard>
+                    </div>
+                  </div>
+                </GlassCard>
+              </div>
             ) : null}
           </section>
         ) : null}

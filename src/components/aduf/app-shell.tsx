@@ -18,6 +18,9 @@ import { LiquidBackground } from "./liquid";
 import { AuthBootstrap } from "./auth-bootstrap";
 import { AutomationsBootstrap } from "./automations-bootstrap";
 import { GoalsBootstrap } from "./goals-bootstrap";
+import { MemoryBootstrap } from "./memory-bootstrap";
+import { NotificationsBootstrap } from "./notifications-bootstrap";
+import { ScheduleBootstrap } from "./schedule-bootstrap";
 import { SignInGate } from "./sign-in-gate";
 import { SignInModal } from "./sign-in-modal";
 import { SurveyModal } from "./survey-modal";
@@ -136,6 +139,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <AuthBootstrap />
       <GoalsBootstrap />
       <AutomationsBootstrap />
+      <MemoryBootstrap />
+      <NotificationsBootstrap />
+      <ScheduleBootstrap />
       <SignInModal />
       <SurveyModal />
       <LiquidBackground />

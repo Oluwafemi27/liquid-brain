@@ -160,8 +160,52 @@ export interface ProposedCreateAutomationAction {
   reasoning: string;
 }
 
+/** A real n8n workflow the agent wants to stand up for the owner — either
+ *  picked from the imported template library (templateId set) or built
+ *  fresh (generatedJson set). Approving this deploys it to the owner's own
+ *  n8n instance via n8n-deployments.ts's createSafeModeDeployment(), which
+ *  ALWAYS creates it inactive — "Safe Mode". The owner still has to tap a
+ *  separate "Turn it on" on the resulting card before it can run against
+ *  real customers; approving this proposedAction only builds it. */
+export interface ProposedDeployN8nWorkflowAction {
+  type: "deploy_n8n_workflow";
+  name: string;
+  /** Library template id to deploy as-is (or its starred correction, if
+   *  one is on file) — set when search_n8n_templates found a good match. */
+  templateId?: string | undefined;
+  /** A short, human-readable description of what the fresh workflow would
+   *  do, used only when no suitable template exists — the actual n8n JSON
+   *  is built server-side from this plus the platform knowledge base, not
+   *  authored by the chat model inline. */
+  buildBrief?: string | undefined;
+  goalTitle?: string | undefined;
+  reasoning: string;
+}
+
 export type ProposedAction =
-  ProposedGoalAction | ProposedAutomationAction | ProposedCreateAutomationAction;
+  | ProposedGoalAction
+  | ProposedAutomationAction
+  | ProposedCreateAutomationAction
+  | ProposedDeployN8nWorkflowAction;
+
+export type N8nDeploymentStatus = "draft" | "inactive" | "active" | "error" | "archived";
+
+/** Client-facing shape of a row in n8n_deployments — see
+ *  src/lib/server/n8n-deployments.ts for the source of truth. */
+export interface N8nDeployment {
+  id: string;
+  automationId: string | null;
+  templateId: string | null;
+  n8nWorkflowId: string | null;
+  name: string;
+  status: N8nDeploymentStatus;
+  safeMode: boolean;
+  builtFrom: "template" | "generated";
+  reasoning: string;
+  lastError: string | null;
+  deployedAt: string;
+  activatedAt: string | null;
+}
 
 export type ProposedActionStatus = "pending" | "approved" | "dismissed";
 

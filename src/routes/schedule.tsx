@@ -70,7 +70,7 @@ const inputClass =
   "min-w-0 rounded-full bg-white/8 px-4 py-2.5 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring [color-scheme:dark]";
 
 function SchedulePage() {
-  const { scheduleEvents, addScheduleEvent, toggleScheduleEventDone, removeScheduleEvent } =
+  const { scheduleEvents, addScheduleEvent, toggleScheduleEventDone, deleteScheduleEvent } =
     useAduf();
 
   const weekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }), []);
@@ -383,7 +383,7 @@ function SchedulePage() {
                         <Check className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        onClick={() => removeScheduleEvent(e.id)}
+                        onClick={() => void deleteScheduleEvent(e.id)}
                         aria-label="Delete event"
                         className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
                       >

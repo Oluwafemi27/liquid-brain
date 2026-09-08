@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { AppShell, PageHeader } from "@/components/aduf/app-shell";
 import { GlassCard } from "@/components/aduf/liquid";
 import { ModelKeysPanel } from "@/components/aduf/model-keys-panel";
+import { N8nConnectionPanel } from "@/components/aduf/n8n-connection-panel";
 import { SkillsPanel } from "@/components/aduf/skills-panel";
 import { useAduf } from "@/store/aduf-store";
 import { useAuth } from "@/store/auth-store";
@@ -197,6 +198,13 @@ function SettingsPage() {
           </div>
 
           <div className="min-w-0 space-y-5 sm:space-y-8">
+            <div>
+              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <Blocks className="h-4 w-4" /> Connections
+              </h2>
+              <N8nConnectionPanel />
+            </div>
+
             <div>
               <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 <Blocks className="h-4 w-4" /> Integrations

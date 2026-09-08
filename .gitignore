@@ -6,3 +6,4 @@ build/
 .tanstack/
 *.log
 .DS_Store
+tools/n8n-ingest/templates-14227.jsonl

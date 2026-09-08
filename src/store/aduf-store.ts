@@ -11,6 +11,7 @@ import type {
   Insight,
   MemoryEdge,
   MemoryNode,
+  N8nDeployment,
   ScheduleEvent,
   SeriesPoint,
   TopCustomer,
@@ -18,13 +19,24 @@ import type {
 import { initialDataSources, initialInsights, initialScheduleEvents } from "@/lib/initial-data";
 import { useAuth } from "@/store/auth-store";
 import {
+  activateN8nDeploymentFn,
   bumpGoalFn,
   createGoalFn,
   createAutomationFn,
+  createInsightFn,
+  createScheduleEventFn,
+  deleteGoalFn,
+  deleteScheduleEventFn,
+  deployN8nWorkflowFn,
+  dismissInsightFn,
   fetchChatHistoryFn,
+  fetchN8nDeployments as fetchN8nDeploymentsFn,
+  markAllInsightsReadFn,
+  markInsightReadFn,
   runAutomationFn,
   setAutomationEnabledFn,
   toggleGoalSubTaskFn,
+  toggleScheduleEventDoneFn,
   updateGoalFn,
 } from "@/lib/server-fns";
 
@@ -96,6 +108,23 @@ interface AdufState {
    *  right now, logging the result and (if goal-linked) recording it into
    *  that goal's progress. */
   runAutomation: (automationId: string) => void;
+  n8nDeployments: N8nDeployment[];
+  setN8nDeployments: (deployments: N8nDeployment[]) => void;
+  upsertN8nDeployment: (deployment: N8nDeployment) => void;
+  fetchN8nDeployments: () => void;
+  /** Deploys a workflow (from a template, or freshly built) to the owner's
+   *  own n8n — ALWAYS created inactive. Used both by the chat approval flow
+   *  (deploy_n8n_workflow proposedAction) and a manual "deploy" action. */
+  deployN8nWorkflow: (input: {
+    name: string;
+    reasoning: string;
+    automationId?: string | undefined;
+    templateId?: string | undefined;
+    buildBrief?: string | undefined;
+  }) => void;
+  /** The only path that turns a deployment on — always an explicit tap on
+   *  "Turn it on", never automatic. */
+  activateN8nDeployment: (deploymentId: string) => void;
   toggleSubTask: (goalId: string, taskId: string) => void;
   bumpGoal: (goalId: string, amount: number) => void;
   addGoal: (title: string, target: number) => void;
@@ -110,6 +139,13 @@ interface AdufState {
   /** Inserts or replaces a single goal by id — used by the realtime subscription. */
   upsertGoal: (goal: Goal) => void;
   removeGoal: (goalId: string) => void;
+  /** Deletes a goal for real: calls the server function, then drops it from
+   *  local state. The realtime subscription will also see the DELETE event
+   *  and no-op harmlessly since the goal is already gone. */
+  deleteGoal: (goalId: string) => Promise<void>;
+  /** Replaces the Business Memory graph — used to hydrate from Supabase on
+   *  load and to apply live updates from the realtime subscription. */
+  setMemoryGraph: (nodes: MemoryNode[], edges: MemoryEdge[]) => void;
   connectSource: (id: string) => void;
   setSourceConnected: (id: string, connected: boolean) => void;
   sendMessage: (text: string) => void;
@@ -124,6 +160,23 @@ interface AdufState {
   /** Records the user's pick(s) for a questionnaire message, then sends
    *  their choice back into the conversation as the next user turn. */
   answerQuestion: (messageId: string, values: string[], label: string) => void;
+  /** Replaces the whole insights list — used to hydrate from Supabase on load. */
+  setInsights: (insights: Insight[]) => void;
+  /** Inserts or replaces a single insight by id — used by the realtime subscription. */
+  upsertInsight: (insight: Insight) => void;
+  removeInsight: (id: string) => void;
+  /** Persists a new insight to Supabase (see lib/server/insights.ts) and adds
+   *  it to local state from the server's response. Every place in the app
+   *  that used to splice a locally-generated insight straight into Zustand
+   *  (goal hit, automation ran, source connected, workflow deployed, event
+   *  scheduled, ...) now calls this instead, so it survives a reload and
+   *  syncs live to every open tab/device. */
+  createInsight: (input: {
+    title: string;
+    body: string;
+    severity: Insight["severity"];
+    source: string;
+  }) => Promise<void>;
   markInsightRead: (id: string) => void;
   markAllInsightsRead: () => void;
   dismissInsight: (id: string) => void;
@@ -132,23 +185,21 @@ interface AdufState {
    *  Grid pages use themselves, then marks the chat message approved. */
   approveProposedAction: (messageId: string) => void;
   dismissProposedAction: (messageId: string) => void;
+  /** Replaces the whole schedule list — used to hydrate from Supabase on load. */
+  setScheduleEvents: (events: ScheduleEvent[]) => void;
+  /** Inserts or replaces a single event by id — used by the realtime subscription. */
+  upsertScheduleEvent: (event: ScheduleEvent) => void;
+  removeScheduleEvent: (id: string) => void;
   addScheduleEvent: (event: Omit<ScheduleEvent, "id" | "done">) => void;
   toggleScheduleEventDone: (id: string) => void;
-  removeScheduleEvent: (id: string) => void;
+  /** Deletes an event for real: calls the server function, then drops it
+   *  from local state (optimistically — restored if the server call fails). */
+  deleteScheduleEvent: (id: string) => Promise<void>;
 }
 
 // The Business Memory graph is built from real connected data sources —
 // there is no fabricated placeholder graph. A fresh/disconnected account
 // simply starts with an empty graph (see memoryNodes/memoryEdges below).
-
-function makeInsight(partial: Omit<Insight, "id" | "createdAt" | "read">): Insight {
-  return {
-    ...partial,
-    id: `insight-${Date.now()}-${Math.round(Math.random() * 1e4)}`,
-    createdAt: Date.now(),
-    read: false,
-  };
-}
 
 export const useAduf = create<AdufState>((set, get) => ({
   userName: "",
@@ -187,17 +238,12 @@ export const useAduf = create<AdufState>((set, get) => ({
       .then((automation) => {
         if (!automation) return;
         get().upsertAutomation(automation);
-        set((s) => ({
-          insights: [
-            makeInsight({
-              title: `New automation live: ${automation.name}`,
-              body: `ADUF set this up on the Automation Grid. It'll run on: ${automation.trigger}.`,
-              severity: "success",
-              source: "Automations",
-            }),
-            ...s.insights,
-          ],
-        }));
+        void get().createInsight({
+          title: `New automation live: ${automation.name}`,
+          body: `ADUF set this up on the Automation Grid. It'll run on: ${automation.trigger}.`,
+          severity: "success",
+          source: "Automations",
+        });
       })
       .catch((err) => console.error("[automations] createAutomation failed", err));
   },
@@ -210,17 +256,12 @@ export const useAduf = create<AdufState>((set, get) => ({
         // progress will already have moved server-side) via the realtime
         // subscription — nothing else to do client-side here beyond
         // surfacing what happened.
-        set((s) => ({
-          insights: [
-            makeInsight({
-              title: run.status === "success" ? "Automation ran" : "Automation run failed",
-              body: run.summary,
-              severity: run.status === "success" ? "success" : "warning",
-              source: "Automations",
-            }),
-            ...s.insights,
-          ],
-        }));
+        void get().createInsight({
+          title: run.status === "success" ? "Automation ran" : "Automation run failed",
+          body: run.summary,
+          severity: run.status === "success" ? "success" : "warning",
+          source: "Automations",
+        });
       })
       .catch((err) => console.error("[automations] runAutomation failed", err));
   },
@@ -237,6 +278,59 @@ export const useAduf = create<AdufState>((set, get) => ({
 
   removeAutomation: (id) =>
     set((s) => ({ automations: s.automations.filter((item) => item.id !== id) })),
+
+  n8nDeployments: [],
+
+  setN8nDeployments: (deployments) => set({ n8nDeployments: deployments }),
+
+  upsertN8nDeployment: (deployment) =>
+    set((s) => {
+      const exists = s.n8nDeployments.some((d) => d.id === deployment.id);
+      return {
+        n8nDeployments: exists
+          ? s.n8nDeployments.map((d) => (d.id === deployment.id ? deployment : d))
+          : [deployment, ...s.n8nDeployments],
+      };
+    }),
+
+  fetchN8nDeployments: () => {
+    fetchN8nDeploymentsFn()
+      .then((deployments) => set({ n8nDeployments: deployments }))
+      .catch((err) => console.error("[n8n] fetchN8nDeployments failed", err));
+  },
+
+  deployN8nWorkflow: (input) => {
+    deployN8nWorkflowFn({ data: input })
+      .then((deployment) => {
+        get().upsertN8nDeployment(deployment);
+        const built = deployment.status === "error";
+        void get().createInsight({
+          title: built
+            ? `Couldn't deploy "${deployment.name}"`
+            : `Built "${deployment.name}" on your n8n — it's off`,
+          body: built
+            ? (deployment.lastError ?? "n8n rejected the deploy.")
+            : `Safe Mode: ADUF deployed this to your n8n instance turned off. Review it, then turn it on when you're ready.`,
+          severity: built ? "warning" : "success",
+          source: "n8n",
+        });
+      })
+      .catch((err) => console.error("[n8n] deployN8nWorkflow failed", err));
+  },
+
+  activateN8nDeployment: (deploymentId) => {
+    activateN8nDeploymentFn({ data: { deploymentId } })
+      .then((deployment) => {
+        get().upsertN8nDeployment(deployment);
+        void get().createInsight({
+          title: `"${deployment.name}" is live`,
+          body: "Turned on — it'll now run for real against your n8n account.",
+          severity: "success",
+          source: "n8n",
+        });
+      })
+      .catch((err) => console.error("[n8n] activateN8nDeployment failed", err));
+  },
 
   // Goals are persisted server-side (Supabase) — these actions fire the
   // request and let the response (or the realtime subscription in
@@ -258,17 +352,12 @@ export const useAduf = create<AdufState>((set, get) => ({
         if (!after) return;
         get().upsertGoal(after);
         if (before && before.current < before.target && after.current >= after.target) {
-          set((s) => ({
-            insights: [
-              makeInsight({
-                title: `Goal reached: ${after.title}`,
-                body: `You hit your target of ${after.currency}${after.target.toLocaleString()}. Nice work.`,
-                severity: "success",
-                source: "Goals",
-              }),
-              ...s.insights,
-            ],
-          }));
+          void get().createInsight({
+            title: `Goal reached: ${after.title}`,
+            body: `You hit your target of ${after.currency}${after.target.toLocaleString()}. Nice work.`,
+            severity: "success",
+            source: "Goals",
+          });
         }
       })
       .catch((err) => console.error("[goals] bumpGoal failed", err));
@@ -287,17 +376,12 @@ export const useAduf = create<AdufState>((set, get) => ({
       .then((goal) => {
         if (!goal) return;
         get().upsertGoal(goal);
-        set((s) => ({
-          insights: [
-            makeInsight({
-              title: `New goal set: ${title}`,
-              body: `ADUF will track progress toward this goal and flag anything worth knowing here.`,
-              severity: "info",
-              source: "Goals",
-            }),
-            ...s.insights,
-          ],
-        }));
+        void get().createInsight({
+          title: `New goal set: ${title}`,
+          body: `ADUF will track progress toward this goal and flag anything worth knowing here.`,
+          severity: "info",
+          source: "Goals",
+        });
       })
       .catch((err) => console.error("[goals] addGoal failed", err));
   },
@@ -313,25 +397,31 @@ export const useAduf = create<AdufState>((set, get) => ({
     }),
 
   removeGoal: (goalId) => set((s) => ({ goals: s.goals.filter((g) => g.id !== goalId) })),
+  deleteGoal: async (goalId) => {
+    // Optimistic: the goal disappears immediately, then we confirm with the
+    // server. If the delete fails, put it back and surface an insight.
+    const removed = get().goals.find((g) => g.id === goalId) ?? null;
+    get().removeGoal(goalId);
+    try {
+      const { ok } = await deleteGoalFn({ data: { goalId } });
+      if (!ok && removed) get().upsertGoal(removed);
+    } catch {
+      if (removed) get().upsertGoal(removed);
+    }
+  },
+  setMemoryGraph: (nodes, edges) => set({ memoryNodes: nodes, memoryEdges: edges }),
 
-  connectSource: (id) =>
-    set((s) => {
-      const sources = s.sources.map((d) => (d.id === id ? { ...d, connected: true } : d));
-      const src = sources.find((x) => x.id === id);
-      if (!src) return { sources };
-      return {
-        sources,
-        insights: [
-          makeInsight({
-            title: `${src.name} connected`,
-            body: `ADUF is now syncing data from ${src.name}.`,
-            severity: "success",
-            source: "Data",
-          }),
-          ...s.insights,
-        ],
-      };
-    }),
+  connectSource: (id) => {
+    set((s) => ({ sources: s.sources.map((d) => (d.id === id ? { ...d, connected: true } : d)) }));
+    const src = get().sources.find((x) => x.id === id);
+    if (!src) return;
+    void get().createInsight({
+      title: `${src.name} connected`,
+      body: `ADUF is now syncing data from ${src.name}.`,
+      severity: "success",
+      source: "Data",
+    });
+  },
 
   setSourceConnected: (id, connected) =>
     set((s) => ({ sources: s.sources.map((d) => (d.id === id ? { ...d, connected } : d)) })),
@@ -442,15 +532,73 @@ export const useAduf = create<AdufState>((set, get) => ({
     get().sendMessage(label);
   },
 
-  markInsightRead: (id) =>
+  setInsights: (insights) => set({ insights }),
+
+  upsertInsight: (insight) =>
+    set((s) => {
+      const exists = s.insights.some((i) => i.id === insight.id);
+      return {
+        insights: exists
+          ? s.insights.map((i) => (i.id === insight.id ? insight : i))
+          : [insight, ...s.insights],
+      };
+    }),
+
+  removeInsight: (id) => set((s) => ({ insights: s.insights.filter((i) => i.id !== id) })),
+
+  createInsight: async (input) => {
+    try {
+      const insight = await createInsightFn({ data: input });
+      if (insight) get().upsertInsight(insight);
+    } catch (err) {
+      console.error("[insights] createInsight failed", err);
+    }
+  },
+
+  markInsightRead: (id) => {
+    // Optimistic: flips immediately, confirmed by the server. Realtime
+    // will also see the UPDATE and no-op harmlessly since it's already set.
+    const before = get().insights.find((i) => i.id === id);
     set((s) => ({
       insights: s.insights.map((i) => (i.id === id ? { ...i, read: true } : i)),
-    })),
+    }));
+    markInsightReadFn({ data: { id } })
+      .then((updated) => {
+        if (updated) get().upsertInsight(updated);
+      })
+      .catch((err) => {
+        console.error("[insights] markInsightRead failed", err);
+        if (before) get().upsertInsight(before);
+      });
+  },
 
-  markAllInsightsRead: () =>
-    set((s) => ({ insights: s.insights.map((i) => ({ ...i, read: true })) })),
+  markAllInsightsRead: () => {
+    const before = get().insights;
+    set((s) => ({ insights: s.insights.map((i) => ({ ...i, read: true })) }));
+    markAllInsightsReadFn()
+      .then(({ ok }) => {
+        if (!ok) set({ insights: before });
+      })
+      .catch((err) => {
+        console.error("[insights] markAllInsightsRead failed", err);
+        set({ insights: before });
+      });
+  },
 
-  dismissInsight: (id) => set((s) => ({ insights: s.insights.filter((i) => i.id !== id) })),
+  dismissInsight: (id) => {
+    // Optimistic: the insight disappears immediately, then we confirm with
+    // the server. If the delete fails, put it back.
+    const removed = get().insights.find((i) => i.id === id) ?? null;
+    get().removeInsight(id);
+    dismissInsightFn({ data: { id } })
+      .then(({ ok }) => {
+        if (!ok && removed) get().upsertInsight(removed);
+      })
+      .catch((err) => {
+        console.error("[insights] dismissInsight failed", err);
+        if (removed) get().upsertInsight(removed);
+      });
+  },
 
   approveProposedAction: (messageId) => {
     const message = get().messages.find((m) => m.id === messageId);
@@ -484,6 +632,16 @@ export const useAduf = create<AdufState>((set, get) => ({
         action: action.action,
         goalTitle: action.goalTitle,
       });
+    } else if (action.type === "deploy_n8n_workflow") {
+      // Builds + deploys the real n8n workflow — ALWAYS inactive (Safe
+      // Mode). This only creates it; a separate explicit "Turn it on" tap
+      // (activateN8nDeployment) is required before it can run for real.
+      get().deployN8nWorkflow({
+        name: action.name,
+        reasoning: action.reasoning,
+        templateId: action.templateId,
+        buildBrief: action.buildBrief,
+      });
     }
   },
 
@@ -494,28 +652,62 @@ export const useAduf = create<AdufState>((set, get) => ({
       ),
     })),
 
-  addScheduleEvent: (event) =>
-    set((s) => ({
-      scheduleEvents: [
-        ...s.scheduleEvents,
-        { ...event, id: `sched-${Date.now()}-${Math.round(Math.random() * 1e4)}`, done: false },
-      ],
-      insights: [
-        makeInsight({
-          title: `Scheduled: ${event.title}`,
-          body: `Booked for ${event.day} ${event.startTime}–${event.endTime}. ADUF will remind you when it's close.`,
-          severity: "info",
-          source: "Schedule",
-        }),
-        ...s.insights,
-      ],
-    })),
+  setScheduleEvents: (events) => set({ scheduleEvents: events }),
 
-  toggleScheduleEventDone: (id) =>
-    set((s) => ({
-      scheduleEvents: s.scheduleEvents.map((e) => (e.id === id ? { ...e, done: !e.done } : e)),
-    })),
+  upsertScheduleEvent: (event) =>
+    set((s) => {
+      const exists = s.scheduleEvents.some((e) => e.id === event.id);
+      return {
+        scheduleEvents: exists
+          ? s.scheduleEvents.map((e) => (e.id === event.id ? event : e))
+          : [...s.scheduleEvents, event],
+      };
+    }),
 
   removeScheduleEvent: (id) =>
     set((s) => ({ scheduleEvents: s.scheduleEvents.filter((e) => e.id !== id) })),
+
+  addScheduleEvent: (event) => {
+    createScheduleEventFn({ data: event })
+      .then((created) => {
+        if (!created) return;
+        get().upsertScheduleEvent(created);
+        void get().createInsight({
+          title: `Scheduled: ${created.title}`,
+          body: `Booked for ${created.day} ${created.startTime}–${created.endTime}. ADUF will remind you when it's close.`,
+          severity: "info",
+          source: "Schedule",
+        });
+      })
+      .catch((err) => console.error("[schedule] addScheduleEvent failed", err));
+  },
+
+  toggleScheduleEventDone: (id) => {
+    // Optimistic: flips immediately, confirmed by the server. If it fails,
+    // flip it back (realtime will also reconcile harmlessly either way).
+    const before = get().scheduleEvents.find((e) => e.id === id);
+    if (before) get().upsertScheduleEvent({ ...before, done: !before.done });
+    toggleScheduleEventDoneFn({ data: { id } })
+      .then((updated) => {
+        if (updated) get().upsertScheduleEvent(updated);
+        else if (before) get().upsertScheduleEvent(before);
+      })
+      .catch((err) => {
+        console.error("[schedule] toggleScheduleEventDone failed", err);
+        if (before) get().upsertScheduleEvent(before);
+      });
+  },
+
+  deleteScheduleEvent: async (id) => {
+    // Optimistic: the event disappears immediately, then we confirm with
+    // the server. If the delete fails, put it back.
+    const removed = get().scheduleEvents.find((e) => e.id === id) ?? null;
+    get().removeScheduleEvent(id);
+    try {
+      const { ok } = await deleteScheduleEventFn({ data: { id } });
+      if (!ok && removed) get().upsertScheduleEvent(removed);
+    } catch {
+      if (removed) get().upsertScheduleEvent(removed);
+    }
+  },
 }));

@@ -29,6 +29,12 @@ function MemoryPage() {
   const { sources, connectSource, memoryNodes, memoryEdges } = useAduf();
   const [focus, setFocus] = useState<string | null>(null);
   const nodes = memoryNodes;
+  // The core "ADUF" node and the orbiting rings are the globe itself — they
+  // stay on screen regardless of data. "Satellites" are the real data
+  // clusters (customers/products/revenue/traffic); only they disappear
+  // when there's nothing to show yet.
+  const satellites = nodes.filter((n) => n.group !== "core");
+  const hasData = satellites.length > 0;
   const active = nodes.find((n) => n.id === focus) ?? null;
 
   return (
@@ -45,28 +51,23 @@ function MemoryPage() {
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <GlassCard hover={false} className="min-w-0 p-4 sm:p-6">
-            {nodes.length === 0 ? (
-              <div className="flex aspect-square w-full flex-col items-center justify-center gap-3 text-center sm:aspect-[4/3]">
-                <div className="grid h-12 w-12 place-items-center rounded-full bg-white/8">
-                  <Network className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <p className="max-w-xs text-sm text-muted-foreground">
-                  No memory yet. Connect a data source and ADUF will start building a knowledge
-                  graph of your customers, products, revenue and traffic here.
-                </p>
-              </div>
-            ) : (
-              <MemoryGlobe nodes={nodes} edges={memoryEdges} focus={focus} onFocus={setFocus} />
-            )}
-            {nodes.length > 0 ? (
-              <p className="mt-3 text-center text-xs text-muted-foreground">
-                {active
-                  ? `${active.label} — ${active.facts.toLocaleString()} facts learned, linked to ${
-                      memoryEdges.filter((e) => e.from === active.id || e.to === active.id).length
-                    } clusters`
-                  : "Tap any node to inspect the cluster"}
-              </p>
-            ) : null}
+            <MemoryGlobe nodes={nodes} edges={memoryEdges} focus={focus} onFocus={setFocus} />
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              {hasData ? (
+                active ? (
+                  `${active.label} — ${active.facts.toLocaleString()} facts learned, linked to ${
+                    memoryEdges.filter((e) => e.from === active.id || e.to === active.id).length
+                  } clusters`
+                ) : (
+                  "Tap any node to inspect the cluster"
+                )
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  <Network className="h-3 w-3" /> No memory yet — connect a data source or start
+                  using ADUF and clusters will appear here live.
+                </span>
+              )}
+            </p>
           </GlassCard>
 
           <div className="space-y-4">

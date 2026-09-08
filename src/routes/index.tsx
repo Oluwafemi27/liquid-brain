@@ -19,6 +19,7 @@ import { AgentQuestion } from "@/components/aduf/agent-question";
 import { AgentProposedAction } from "@/components/aduf/agent-proposed-action";
 import { AgentTracePanel } from "@/components/aduf/agent-trace";
 import { ChatAttachmentCard } from "@/components/aduf/chat-attachment";
+import { ChatMarkdown } from "@/components/aduf/chat-markdown";
 import { AdufAnalysisCard } from "@/components/aduf/aduf-analysis-card";
 import { SESSION_STORAGE_KEY, useAduf } from "@/store/aduf-store";
 import { fetchChatHistoryFn, listChatSessionsFn } from "@/lib/server-fns";
@@ -422,7 +423,7 @@ function BrainPage() {
                     m.role === "user" ? "bg-white/12" : "bg-secondary text-muted-foreground"
                   }`}
                 >
-                  {m.text}
+                  {m.role === "user" ? m.text : <ChatMarkdown content={m.text} />}
                 </div>
                 {m.trace?.length ? <AgentTracePanel steps={m.trace} /> : null}
                 {m.analysis ? <AdufAnalysisCard analysis={m.analysis} /> : null}

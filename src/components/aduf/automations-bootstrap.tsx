@@ -1,7 +1,7 @@
 import { useEffect } from "react";
-import type { Automation } from "@/lib/aduf-types";
+import type { Automation, N8nDeployment } from "@/lib/aduf-types";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
-import { fetchAutomations } from "@/lib/server-fns";
+import { fetchAutomations, fetchN8nDeployments } from "@/lib/server-fns";
 import { useAduf } from "@/store/aduf-store";
 
 /** Raw shape of a Supabase realtime row for `automations` — snake_case, as
@@ -37,8 +37,47 @@ function mapRow(row: AutomationRealtimeRow): Automation {
   };
 }
 
+/** Raw shape of a Supabase realtime row for `n8n_deployments`. */
+interface N8nDeploymentRealtimeRow {
+  id: string;
+  automation_id: string | null;
+  template_id: string | null;
+  n8n_workflow_id: string | null;
+  name: string;
+  status: N8nDeployment["status"];
+  safe_mode: boolean;
+  built_from: N8nDeployment["builtFrom"];
+  reasoning: string;
+  last_error: string | null;
+  deployed_at: string;
+  activated_at: string | null;
+}
+
+function mapDeploymentRow(row: N8nDeploymentRealtimeRow): N8nDeployment {
+  return {
+    id: row.id,
+    automationId: row.automation_id,
+    templateId: row.template_id,
+    n8nWorkflowId: row.n8n_workflow_id,
+    name: row.name,
+    status: row.status,
+    safeMode: row.safe_mode,
+    builtFrom: row.built_from,
+    reasoning: row.reasoning,
+    lastError: row.last_error,
+    deployedAt: row.deployed_at,
+    activatedAt: row.activated_at,
+  };
+}
+
 export function AutomationsBootstrap() {
-  const { setAutomations, upsertAutomation, removeAutomation } = useAduf();
+  const {
+    setAutomations,
+    upsertAutomation,
+    removeAutomation,
+    setN8nDeployments,
+    upsertN8nDeployment,
+  } = useAduf();
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +90,18 @@ export function AutomationsBootstrap() {
       cancelled = true;
     };
   }, [setAutomations]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchN8nDeployments()
+      .then((deployments) => {
+        if (!cancelled) setN8nDeployments(deployments);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [setN8nDeployments]);
 
   useEffect(() => {
     const client = getSupabaseBrowser();
@@ -66,12 +117,23 @@ export function AutomationsBootstrap() {
         }
         upsertAutomation(mapRow(payload.new as AutomationRealtimeRow));
       })
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "n8n_deployments" },
+        (payload) => {
+          // Deployments aren't removed from the UI on delete — an archived
+          // workflow still has history worth keeping visible; only insert
+          // and update matter here.
+          if (payload.eventType === "DELETE") return;
+          upsertN8nDeployment(mapDeploymentRow(payload.new as N8nDeploymentRealtimeRow));
+        },
+      )
       .subscribe();
 
     return () => {
       client.removeChannel(channel);
     };
-  }, [upsertAutomation, removeAutomation]);
+  }, [upsertAutomation, removeAutomation, upsertN8nDeployment]);
 
   return null;
 }

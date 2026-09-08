@@ -1,4 +1,4 @@
-import { Check, Sparkles, Target, X, Zap } from "lucide-react";
+import { Check, Sparkles, Target, Workflow, X, Zap } from "lucide-react";
 import type { ProposedAction, ProposedActionStatus } from "@/lib/aduf-types";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,12 @@ function summarize(action: ProposedAction): { icon: typeof Target; title: string
     return {
       icon: Sparkles,
       title: `New automation: "${action.name}"${action.goalTitle ? ` → feeds "${action.goalTitle}"` : ""}`,
+    };
+  }
+  if (action.type === "deploy_n8n_workflow") {
+    return {
+      icon: Workflow,
+      title: `Build "${action.name}" on your n8n — deployed off, review before it runs`,
     };
   }
   return {

@@ -5,6 +5,8 @@ import { MODEL_PROVIDERS, callProviderChat, type ChatTurn } from "./model-provid
 import { resolveDefaultModelKey } from "./model-keys";
 import { buildSkillsBlock, listSkills } from "./skills";
 import { isSandboxConfigured, runInSandbox } from "./sandbox";
+import { searchN8nTemplates } from "./n8n-templates";
+import { searchN8nSkillDocs } from "./n8n-skills";
 
 const ADUF_SEVERITIES = ["low", "medium", "high", "critical"] as const;
 
@@ -64,6 +66,14 @@ const proposedActionSchema = z.discriminatedUnion("type", [
     goalTitle: z.string().max(120).optional(),
     reasoning: z.string().min(1).max(400),
   }),
+  z.object({
+    type: z.literal("deploy_n8n_workflow"),
+    name: z.string().min(1).max(120),
+    templateId: z.string().uuid().optional(),
+    buildBrief: z.string().max(1000).optional(),
+    goalTitle: z.string().max(120).optional(),
+    reasoning: z.string().min(1).max(400),
+  }),
 ]);
 
 /** A tool the agent can invoke mid-reply instead of guessing — currently
@@ -72,14 +82,34 @@ const proposedActionSchema = z.discriminatedUnion("type", [
  *  it executes immediately, no owner approval needed — running a read-only
  *  calculation in a throwaway sandbox isn't a change to the business, so
  *  it doesn't need the same gate a real goal/automation change does. */
-const toolCallSchema = z.object({
-  type: z.literal("run_code"),
-  language: z.enum(["python", "javascript", "bash"]).default("python"),
-  code: z.string().min(1).max(20_000),
-  /** One short phrase shown to the owner while it runs, e.g. "Checking the
-   *  math on your margin scenario". */
-  purpose: z.string().min(1).max(200),
-});
+const toolCallSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("run_code"),
+    language: z.enum(["python", "javascript", "bash"]).default("python"),
+    code: z.string().min(1).max(20_000),
+    /** One short phrase shown to the owner while it runs, e.g. "Checking the
+     *  math on your margin scenario". */
+    purpose: z.string().min(1).max(200),
+  }),
+  z.object({
+    type: z.literal("search_n8n_templates"),
+    /** Plain-language description of the automation needed, e.g. "shopify
+     *  abandoned checkout to whatsapp reminder". Searched against the
+     *  imported template library (4000+ workflows from n8n-workflows,
+     *  awesome-n8n-templates, AI-Workflow-Hub-2000, n8n-workflow-all-templates
+     *  and the project-management pack) — use this BEFORE proposing
+     *  deploy_n8n_workflow so you pick a real match instead of guessing. */
+    query: z.string().min(1).max(200),
+  }),
+  z.object({
+    type: z.literal("search_n8n_docs"),
+    /** Looks up n8n platform knowledge (node behavior, trigger setup,
+     *  credential wiring, common breakage patterns) ported from the n8n
+     *  skills repos — use this when you're unsure how a node/trigger
+     *  actually works before proposing a workflow. */
+    query: z.string().min(1).max(200),
+  }),
+]);
 
 const agentReplySchema = z.object({
   reply: z.string().min(1),
@@ -215,6 +245,21 @@ same reply. Three shapes exist today:
   results should feed that goal's progress (e.g. a revenue-producing
   automation linked to a sales goal) — leave it unset if there's no
   matching goal yet.
+- {"type": "deploy_n8n_workflow", "name": string, "templateId": string (uuid, optional), "buildBrief": string (optional), "goalTitle": string (optional), "reasoning": string} —
+  propose this when the owner wants a REAL automation running on their own
+  n8n account, not just a Grid toggle. Always call "search_n8n_templates"
+  first — if a good match comes back, set "templateId" to its id (this
+  reuses a real, working workflow from the 14,000+ imported library instead
+  of you inventing JSON). Only set "buildBrief" when nothing fits; describe
+  exactly what it should do, plainly — the build step will itself search
+  "search_n8n_docs" for relevant platform knowledge and validate every node
+  against real n8n node/credential schemas before it's ever sent to the
+  owner's instance, repairing itself once if validation finds an issue.
+  "reasoning" is shown to the owner and must say which template you picked
+  (and why) or that you're building fresh. Approving this only DEPLOYS it —
+  every workflow lands on the owner's n8n turned OFF ("Safe Mode"). The
+  owner sees "I built it. Want me to turn it on?" and has to explicitly
+  activate it — never claim it's running yet.
 
 === Formatting: use tables for structured answers ===
 Start every reply with 1-2 plain sentences, no jargon. Then, if the answer
@@ -249,9 +294,32 @@ in your reply rather than pretending it worked. This executes immediately
 with no approval step (unlike proposedAction) — never use it to touch the
 owner's real data, only to compute/verify something.
 
+Two more toolCall shapes exist for n8n work, both read-only lookups (no
+approval needed, same as run_code):
+- {"type": "search_n8n_templates", "query": string} — searches the imported
+  library of real n8n workflow templates. Always run this before proposing
+  "deploy_n8n_workflow" so you offer a workflow that actually exists and
+  actually works, not one you invented. Each result may include a
+  "correction" — a starred, known-broken flag from the weekly repair sweep
+  or a past failed deploy, with the specific issue and (if fixed) a
+  corrected version. NEVER propose a templateId whose correction has no
+  fix on file (correctedJson null / status still open) — pick a different
+  match or fall back to "buildBrief" instead.
+- {"type": "search_n8n_docs", "query": string} — searches ~90 real, current
+  n8n platform reference docs ported from n8n's own official skills library
+  plus community expert guides (node configuration, triggers/webhooks,
+  credentials & security, error handling, expressions, loops, sub-workflows,
+  agents/AI nodes, debugging, validation, self-hosting) — this is what makes
+  you genuinely good at n8n rather than guessing from general knowledge.
+  ALWAYS call this before writing a "buildBrief" for a brand-new workflow —
+  check trigger setup, the specific node types involved, and error-handling
+  conventions before you build. Also use it when explaining to the owner why
+  something in their automation works the way it does, or when repairing a
+  flagged template.
+
 Respond with ONLY a single JSON object, no markdown fences, no prose outside
 it, matching exactly:
-{"reply": string, "question": {"prompt": string, "multi": boolean, "options": [{"id": string, "label": string, "value": string}]} | null, "document": {"filename": string, "format": "txt"|"md"|"docx"|"pdf", "content": string} | null, "analysis": {"summary": string, "findings": [{"area": "visibility"|"credibility"|"customer_journey"|"conversion"|"sales"|"retention"|"operations"|"local_presence"|"search_ai_visibility", "problem": string, "severity": "low"|"medium"|"high"|"critical", "rootCauses": string[], "opportunities": string[], "recommendedActions": string[], "estimatedImpact": string, "automationPossible": boolean, "automationNotes": string, "expertRequired": boolean, "expertType": string}]} | null, "proposedAction": {"type": "create_goal", "title": string, "target": number, "currency": string, "reasoning": string} | {"type": "toggle_automation", "channelId": "website"|"whatsapp"|"crm"|"payments"|"ads"|"email", "enabled": boolean, "reasoning": string} | {"type": "create_automation", "name": string, "trigger": string, "action": string, "goalTitle": string, "reasoning": string} | null, "toolCall": {"type": "run_code", "language": "python"|"javascript"|"bash", "code": string, "purpose": string} | null}`;
+{"reply": string, "question": {"prompt": string, "multi": boolean, "options": [{"id": string, "label": string, "value": string}]} | null, "document": {"filename": string, "format": "txt"|"md"|"docx"|"pdf", "content": string} | null, "analysis": {"summary": string, "findings": [{"area": "visibility"|"credibility"|"customer_journey"|"conversion"|"sales"|"retention"|"operations"|"local_presence"|"search_ai_visibility", "problem": string, "severity": "low"|"medium"|"high"|"critical", "rootCauses": string[], "opportunities": string[], "recommendedActions": string[], "estimatedImpact": string, "automationPossible": boolean, "automationNotes": string, "expertRequired": boolean, "expertType": string}]} | null, "proposedAction": {"type": "create_goal", "title": string, "target": number, "currency": string, "reasoning": string} | {"type": "toggle_automation", "channelId": "website"|"whatsapp"|"crm"|"payments"|"ads"|"email", "enabled": boolean, "reasoning": string} | {"type": "create_automation", "name": string, "trigger": string, "action": string, "goalTitle": string, "reasoning": string} | {"type": "deploy_n8n_workflow", "name": string, "templateId": string, "buildBrief": string, "goalTitle": string, "reasoning": string} | null, "toolCall": {"type": "run_code", "language": "python"|"javascript"|"bash", "code": string, "purpose": string} | {"type": "search_n8n_templates", "query": string} | {"type": "search_n8n_docs", "query": string} | null}`;
 
 /** Max code-execution round trips inside a single reply — bounds latency
  *  and cost; almost every reply that needs a tool call needs it once. */
@@ -329,10 +397,16 @@ export async function callAgent(
     }
 
     toolCallsUsed++;
-    const { language, code, purpose } = parsed.toolCall;
+    const call = parsed.toolCall;
+    const label =
+      call.type === "run_code"
+        ? `Ran code: ${call.purpose}`
+        : call.type === "search_n8n_templates"
+          ? `Searched n8n templates: ${call.query}`
+          : `Looked up n8n docs: ${call.query}`;
     const step: AgentTraceStep = {
       id: `tool-${Date.now()}-${toolCallsUsed}`,
-      label: `Ran code: ${purpose}`,
+      label,
       status: "running",
     };
     toolTrace.push(step);
@@ -344,6 +418,53 @@ export async function callAgent(
       role: "assistant",
       content: JSON.stringify({ reply: parsed.reply, question: null }),
     });
+
+    if (call.type === "search_n8n_templates") {
+      const matches = await searchN8nTemplates(call.query);
+      step.status = "done";
+      step.detail = matches.length ? `${matches.length} match(es)` : "No matches";
+      turns.push({
+        role: "user",
+        content:
+          `Tool result for search_n8n_templates ("${call.query}"):\n` +
+          (matches.length
+            ? JSON.stringify(
+                matches.map((m) => ({
+                  id: m.id,
+                  name: m.name,
+                  description: m.description,
+                  integrations: m.integrations,
+                  triggerType: m.triggerType,
+                  correction: m.correction, // null unless starred+open — see instructions
+                })),
+              )
+            : "No templates matched. Fall back to a \"buildBrief\" in deploy_n8n_workflow instead.") +
+          `\n\nUse the best match's exact "id" as templateId if proposing deploy_n8n_workflow. ` +
+          `If every close match has a "correction" with correctedJson still null (unfixed), do ` +
+          `not use it — pick another or build fresh. Give your final "reply" now unless another ` +
+          `tool call is genuinely necessary.`,
+      });
+      continue;
+    }
+
+    if (call.type === "search_n8n_docs") {
+      const docs = await searchN8nSkillDocs(call.query);
+      step.status = "done";
+      step.detail = docs.length ? `${docs.length} doc(s)` : "No matches";
+      turns.push({
+        role: "user",
+        content:
+          `Tool result for search_n8n_docs ("${call.query}"):\n` +
+          (docs.length
+            ? docs.map((d) => `### ${d.title}\n${d.content}`).join("\n\n")
+            : "No matching reference doc — use general knowledge and say so if unsure.") +
+          `\n\nGive your final "reply" now unless another tool call is genuinely necessary.`,
+      });
+      continue;
+    }
+
+    // call.type === "run_code"
+    const { language, code, purpose } = call;
 
     if (!isSandboxConfigured()) {
       step.status = "error";
