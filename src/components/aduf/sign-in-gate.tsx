@@ -13,7 +13,10 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/store/auth-store";
 import { GoogleGlyph } from "./sign-in-modal";
+import { AnimatedAnalyticsReplay } from "./animated-analytics-replay";
 import auroraBg from "@/assets/aurora-bg.jpg";
+import automationCore from "@/assets/automation-core.png";
+import automationLiveFeed from "@/assets/automation-live-feed.webp";
 
 const fadeUp = {
   initial: { opacity: 0, y: 16 },
@@ -124,13 +127,17 @@ export function SignInGate({ loading }: { loading: boolean }) {
           </div>
           <p className="truncate font-display text-sm font-semibold">ADUF AI</p>
         </div>
-        <GoogleCta
-          loading={loading}
-          redirecting={redirecting}
-          onClick={handleGoogleClick}
-          label={loading ? "Loading…" : "Sign in"}
-          className="px-4 py-2 text-xs"
-        />
+        <button
+          type="button"
+          onClick={() =>
+            document
+              .getElementById("hero-cta")
+              ?.scrollIntoView({ behavior: "smooth", block: "center" })
+          }
+          className="text-xs font-medium text-muted-foreground hover:text-foreground"
+        >
+          Sign in
+        </button>
       </header>
 
       {/* Hero */}
@@ -152,30 +159,79 @@ export function SignInGate({ loading }: { loading: boolean }) {
               "linear-gradient(180deg, color-mix(in oklab, var(--background) 20%, transparent) 0%, var(--background) 92%)",
           }}
         />
-
+        {/* Slow-drifting ambient glow — continuous motion behind the hero
+         *  content so the page feels alive even before anything scrolls
+         *  into view. */}
         <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
-          className="mx-auto max-w-2xl text-center"
-        >
-          <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-            The Business Brain for SMBs
-          </p>
-          <h1 className="mt-3 text-3xl font-semibold leading-tight sm:text-5xl">
-            An always-on AI COO for <span className="text-gradient">your business</span>
-          </h1>
-          <p className="mx-auto mt-4 max-w-xl text-sm text-muted-foreground sm:text-base">
-            ADUF AI watches your sales, leads and retention, chats with you about what's happening,
-            tracks the goals that matter, and automates the busywork across WhatsApp, ads, CRM and
-            payments — so you can run the business, not the spreadsheet.
-          </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <GoogleCta loading={loading} redirecting={redirecting} onClick={handleGoogleClick} />
-          </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Sign in with Google — that's the only account you'll need.
-          </p>
+          aria-hidden
+          className="pointer-events-none absolute -right-24 -top-24 -z-10 h-72 w-72 rounded-full blur-3xl"
+          style={{ background: "var(--gradient-accent)", opacity: 0.18 }}
+          animate={{ x: [0, 30, -10, 0], y: [0, 20, -15, 0] }}
+          transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-24 -left-16 -z-10 h-64 w-64 rounded-full blur-3xl"
+          style={{ background: "var(--cyan)", opacity: 0.12 }}
+          animate={{ x: [0, -20, 15, 0], y: [0, -15, 10, 0] }}
+          transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
+        />
+
+        <div className="mx-auto grid max-w-5xl items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
+            className="text-center lg:text-left"
+          >
+            <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+              The Business Brain for SMBs
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold leading-tight sm:text-5xl">
+              An always-on AI COO for <span className="text-gradient">your business</span>
+            </h1>
+            <p className="mx-auto mt-4 max-w-xl text-sm text-muted-foreground sm:text-base lg:mx-0">
+              ADUF AI watches your sales, leads and retention, chats with you about what's
+              happening, tracks the goals that matter, and automates the busywork across WhatsApp,
+              ads, CRM and payments — so you can run the business, not the spreadsheet.
+            </p>
+            <div
+              id="hero-cta"
+              className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start"
+            >
+              <GoogleCta loading={loading} redirecting={redirecting} onClick={handleGoogleClick} />
+            </div>
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              Sign in with Google — that's the only account you'll need.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.7, delay: 0.15, ease: [0.2, 0.8, 0.2, 1] }}
+            className="relative mx-auto hidden w-full max-w-xs lg:block"
+          >
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 -z-10 rounded-full blur-3xl"
+              style={{ background: "var(--gradient-accent)", opacity: 0.22 }}
+            />
+            <motion.img
+              src={automationCore}
+              alt="Illustration of ADUF AI's automation core, an AI robot directing data across connected channels"
+              className="w-full"
+              animate={{ y: [0, -10, 0] }}
+              transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+            />
+          </motion.div>
+        </div>
+      </section>
+
+      {/* See it in action — the looping animated analytics + automation replay */}
+      <section className="mx-auto max-w-[1200px] px-4 pb-4 sm:px-6">
+        <motion.div {...fadeUp} transition={{ duration: 0.5 }} className="mx-auto max-w-2xl">
+          <AnimatedAnalyticsReplay />
         </motion.div>
       </section>
 
@@ -270,12 +326,30 @@ export function SignInGate({ loading }: { loading: boolean }) {
               <h2 className="mt-2 text-xl font-semibold sm:text-2xl">
                 Built to actually run your day-to-day, not just report on it
               </h2>
-              <div className="mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-                <GoogleCta
-                  loading={loading}
-                  redirecting={redirecting}
-                  onClick={handleGoogleClick}
+              <div className="relative mt-6 overflow-hidden rounded-2xl">
+                <img
+                  src={automationLiveFeed}
+                  alt="Real infrastructure behind ADUF: a live server rack routing data between connected channels"
+                  className="max-h-56 w-full object-cover object-top"
+                  loading="lazy"
                 />
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, transparent 40%, color-mix(in oklab, var(--background) 90%, transparent) 100%)",
+                  }}
+                />
+              </div>
+              <div className="mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                  className="text-sm font-medium text-cyan hover:underline"
+                >
+                  Sign in above to get started →
+                </button>
               </div>
             </motion.div>
             <motion.ul {...fadeUp} transition={{ duration: 0.5, delay: 0.1 }} className="space-y-3">

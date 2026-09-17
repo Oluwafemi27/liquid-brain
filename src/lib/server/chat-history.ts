@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 import type { ChatMessage } from "@/lib/aduf-types";
-import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin } from "./supabase";
 
 interface ChatMessageRow {
   id: string;
@@ -29,12 +29,13 @@ function fromRow(row: ChatMessageRow): ChatMessage {
   };
 }
 
-/** Every persisted message for a chat session, oldest first. Powers the
- *  chat page reloading its history on refresh instead of always starting
- *  blank — the messages were already being saved by /api/chat, nothing was
- *  ever reading them back. Returns [] if no backend is configured or the
- *  session has no history yet (both are normal, not errors). */
-export async function fetchChatHistory(sessionId: string): Promise<ChatMessage[]> {
+/** Every persisted message for this user's chat session, oldest first.
+ *  Powers the chat page reloading its history on refresh instead of always
+ *  starting blank. Returns [] if no backend is configured, the caller
+ *  isn't signed in, or the session has no history yet (all normal, not
+ *  errors). Session ids are scoped to the owning user_id, so one user can
+ *  never read another's session even if they guessed its id. */
+export async function fetchChatHistory(userId: string, sessionId: string): Promise<ChatMessage[]> {
   const db = getSupabaseAdmin();
   if (!db || !sessionId) return [];
 
@@ -43,7 +44,7 @@ export async function fetchChatHistory(sessionId: string): Promise<ChatMessage[]
     .select(
       "id, role, text, question, answered_values, trace, attachments, analysis, proposed_action, created_at",
     )
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .eq("session_id", sessionId)
     .order("created_at", { ascending: true });
   if (error) {
@@ -53,20 +54,21 @@ export async function fetchChatHistory(sessionId: string): Promise<ChatMessage[]
   return (data ?? []).map((row) => fromRow(row as ChatMessageRow));
 }
 
-/** Distinct chat sessions for the workspace, most recent first, each with a
- *  short label taken from its first user message — used to populate a
- *  "recent chats" switcher so old conversations are never permanently lost
- *  behind a fresh session id. */
-export async function listChatSessions(): Promise<
-  Array<{ sessionId: string; preview: string; updatedAt: string }>
-> {
+/** Distinct chat sessions belonging to this user, most recent first, each
+ *  with a short label taken from its first user message — used to populate
+ *  the "recent chats" switcher so old conversations are never permanently
+ *  lost behind a fresh session id. Scoped to user_id so one account never
+ *  sees another account's conversations. */
+export async function listChatSessions(
+  userId: string,
+): Promise<Array<{ sessionId: string; preview: string; updatedAt: string }>> {
   const db = getSupabaseAdmin();
   if (!db) return [];
 
   const { data, error } = await db
     .from("chat_messages")
     .select("session_id, role, text, created_at")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(500);
   if (error || !data) {

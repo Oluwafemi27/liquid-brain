@@ -3,6 +3,7 @@ import type { Automation, N8nDeployment } from "@/lib/aduf-types";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { fetchAutomations, fetchN8nDeployments } from "@/lib/server-fns";
 import { useAduf } from "@/store/aduf-store";
+import { useAuth } from "@/store/auth-store";
 
 /** Raw shape of a Supabase realtime row for `automations` — snake_case, as
  *  Postgres sends it, before mapping onto the camelCase Automation type the
@@ -78,10 +79,12 @@ export function AutomationsBootstrap() {
     setN8nDeployments,
     upsertN8nDeployment,
   } = useAduf();
+  const { user, accessToken } = useAuth();
 
   useEffect(() => {
+    if (!user) return;
     let cancelled = false;
-    fetchAutomations()
+    fetchAutomations({ data: { accessToken } })
       .then((automations) => {
         if (!cancelled) setAutomations(automations);
       })
@@ -89,11 +92,12 @@ export function AutomationsBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, [setAutomations]);
+  }, [user, accessToken, setAutomations]);
 
   useEffect(() => {
+    if (!user) return;
     let cancelled = false;
-    fetchN8nDeployments()
+    fetchN8nDeployments({ data: { accessToken } })
       .then((deployments) => {
         if (!cancelled) setN8nDeployments(deployments);
       })
@@ -101,25 +105,29 @@ export function AutomationsBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, [setN8nDeployments]);
+  }, [user, accessToken, setN8nDeployments]);
 
   useEffect(() => {
     const client = getSupabaseBrowser();
-    if (!client) return;
+    if (!client || !user) return;
 
     const channel = client
-      .channel("automations-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "automations" }, (payload) => {
-        if (payload.eventType === "DELETE") {
-          const id = (payload.old as { id?: string }).id;
-          if (id) removeAutomation(id);
-          return;
-        }
-        upsertAutomation(mapRow(payload.new as AutomationRealtimeRow));
-      })
+      .channel(`automations-realtime-${user.id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "n8n_deployments" },
+        { event: "*", schema: "public", table: "automations", filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            const id = (payload.old as { id?: string }).id;
+            if (id) removeAutomation(id);
+            return;
+          }
+          upsertAutomation(mapRow(payload.new as AutomationRealtimeRow));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "n8n_deployments", filter: `user_id=eq.${user.id}` },
         (payload) => {
           // Deployments aren't removed from the UI on delete — an archived
           // workflow still has history worth keeping visible; only insert
@@ -133,7 +141,7 @@ export function AutomationsBootstrap() {
     return () => {
       client.removeChannel(channel);
     };
-  }, [upsertAutomation, removeAutomation, upsertN8nDeployment]);
+  }, [user, upsertAutomation, removeAutomation, upsertN8nDeployment]);
 
   return null;
 }

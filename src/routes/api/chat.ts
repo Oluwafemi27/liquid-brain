@@ -4,7 +4,7 @@ import { NoModelConfiguredError, callAgent } from "@/lib/server/agent";
 import { HarnessExhaustedError, runWithHarness } from "@/lib/server/agent-harness";
 import { createDocument } from "@/lib/server/documents";
 import { resolveDefaultModelKey } from "@/lib/server/model-keys";
-import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "@/lib/server/supabase";
+import { getSupabaseAdmin } from "@/lib/server/supabase";
 import { getSurvey, surveyToContext, verifyAccessToken } from "@/lib/server/survey";
 import type {
   AdufAnalysis,
@@ -23,11 +23,24 @@ const chatMessageShape = z.object({
   trace: z.any().optional(),
 });
 
+const attachmentShape = z.object({
+  id: z.string(),
+  filename: z.string(),
+  format: z.enum(["txt", "md", "docx", "pdf"]),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
+  previewText: z.string().nullable().optional(),
+});
+
 const bodySchema = z.object({
-  message: z.string().min(1).max(4000),
+  message: z.string().max(4000),
   history: z.array(chatMessageShape).optional(),
   sessionId: z.string().min(1).max(200).optional(),
   accessToken: z.string().min(1).nullable().optional(),
+  /** A file the user attached via the paperclip menu — already uploaded to
+   *  storage client-side (see /api/documents/upload) before this request is
+   *  sent, so this is just its metadata + extracted preview text. */
+  attachment: attachmentShape.optional(),
 });
 
 function json(data: unknown, status = 200) {
@@ -38,6 +51,7 @@ function json(data: unknown, status = 200) {
 }
 
 async function logMessage(
+  userId: string | undefined,
   sessionId: string,
   role: "user" | "aduf",
   text: string,
@@ -51,9 +65,12 @@ async function logMessage(
   } = {},
 ) {
   const db = getSupabaseAdmin();
-  if (!db) return;
+  // No verified user, no row — there is no "shared" chat history to fall
+  // back to anymore, and writing without an owner would be exactly the bug
+  // this was fixed to prevent.
+  if (!db || !userId) return;
   const { error } = await db.from("chat_messages").insert({
-    workspace_id: DEFAULT_WORKSPACE_ID,
+    user_id: userId,
     session_id: sessionId,
     role,
     text,
@@ -115,25 +132,49 @@ export const Route = createFileRoute("/api/chat")({
         if (!parsed.success) {
           return json({ error: "Invalid request", details: parsed.error.flatten() }, 400);
         }
-        const { message, history = [], sessionId = "default", accessToken } = parsed.data;
+        const {
+          message,
+          history = [],
+          sessionId = "default",
+          accessToken,
+          attachment,
+        } = parsed.data;
 
         // Server-side backstop for the sign-in gate — the chat UI already
         // refuses to call this endpoint while signed out, but that's only a
         // client convenience. If a backend is configured (so identity can
         // actually be checked), a request without a valid session is
         // rejected here too, regardless of what the client claims.
+        if (!message.trim() && !attachment) {
+          return json({ error: "Message or attachment required" }, 400);
+        }
+
         const isBackendConfigured = Boolean(getSupabaseAdmin());
         const authedUser = isBackendConfigured ? await verifyAccessToken(accessToken) : null;
         if (isBackendConfigured && !authedUser) {
           return json({ error: "sign_in_required" }, 401);
         }
+        const userId = authedUser?.id;
+
+        // What the model actually reads — if a file was attached, fold its
+        // extracted text in as clearly-labelled context ahead of what the
+        // user typed, so the agent can answer questions about it. The
+        // *persisted* + *displayed* user message stays exactly what they
+        // typed; only the model's view is augmented.
+        const messageForAgent = attachment
+          ? `[Attached file: ${attachment.filename}]\n${attachment.previewText ?? "(no extractable text)"}\n\n${message}`.trim()
+          : message;
 
         // Fire-and-forget persistence — never block or fail the reply on this.
-        void logMessage(sessionId, "user", message);
+        void logMessage(userId, sessionId, "user", message, {
+          attachments: attachment
+            ? [{ ...attachment, previewText: attachment.previewText ?? null }]
+            : undefined,
+        });
 
         if (!(await resolveDefaultModelKey())) {
           const error = new NoModelConfiguredError();
-          void logMessage(sessionId, "aduf", error.message);
+          void logMessage(userId, sessionId, "aduf", error.message);
           return json({ reply: error.message, question: null, trace: [] });
         }
 
@@ -145,7 +186,7 @@ export const Route = createFileRoute("/api/chat")({
           const { result, trace } = await runWithHarness(
             "brain-chat-reply",
             (repairContext) =>
-              callAgent(history as ChatMessage[], message, repairContext, surveyContext),
+              callAgent(history as ChatMessage[], messageForAgent, repairContext, surveyContext),
             { maxAttempts: 3 },
           );
           // The outer harness's trace covers whole-reply retries; the
@@ -154,7 +195,7 @@ export const Route = createFileRoute("/api/chat")({
           // panel shows the full picture.
           const fullTrace = [...trace, ...result.toolTrace];
           const attachments = await attachDocumentIfRequested(sessionId, result.document);
-          void logMessage(sessionId, "aduf", result.reply, {
+          void logMessage(userId, sessionId, "aduf", result.reply, {
             question: result.question ?? null,
             trace: fullTrace,
             attachments,
@@ -171,7 +212,7 @@ export const Route = createFileRoute("/api/chat")({
           });
         } catch (error) {
           if (error instanceof NoModelConfiguredError) {
-            void logMessage(sessionId, "aduf", error.message);
+            void logMessage(userId, sessionId, "aduf", error.message);
             return json({ reply: error.message, question: null, trace: [] });
           }
           const trace = error instanceof HarnessExhaustedError ? error.trace : [];
@@ -179,7 +220,7 @@ export const Route = createFileRoute("/api/chat")({
           const reply =
             "I tried a few times but couldn't put together a good answer to that — mind rephrasing, " +
             "or asking something more specific?";
-          void logMessage(sessionId, "aduf", reply, { trace });
+          void logMessage(userId, sessionId, "aduf", reply, { trace });
           // 200, not 500: the harness already exhausted its retries, and the
           // chat UI should show a graceful in-conversation message, not a
           // network-error toast, for a failure this far downstream.

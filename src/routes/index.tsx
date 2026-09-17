@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowUpRight,
   History,
+  Loader2,
   Mic,
   Paperclip,
   Plug,
@@ -10,6 +11,7 @@ import {
   Send,
   SquarePen,
   Target,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { AppShell } from "@/components/aduf/app-shell";
@@ -22,8 +24,10 @@ import { ChatMarkdown } from "@/components/aduf/chat-markdown";
 import { InsightToastStack } from "@/components/aduf/insight-toast";
 import { AdufAnalysisCard } from "@/components/aduf/aduf-analysis-card";
 import { SESSION_STORAGE_KEY, useAduf } from "@/store/aduf-store";
+import { useAuth } from "@/store/auth-store";
 import { fetchChatHistoryFn, listChatSessionsFn } from "@/lib/server-fns";
 import { cn } from "@/lib/utils";
+import type { ChatAttachment } from "@/lib/aduf-types";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -74,6 +78,31 @@ interface SpeechRecognitionLike {
 }
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
+/** Maps a file's extension to one of the 4 formats /api/documents/upload
+ *  accepts. Returns null for anything else so the caller can show a clear
+ *  "not supported" message instead of silently mangling the file. */
+function formatFromFilename(filename: string): "txt" | "md" | "docx" | "pdf" | null {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  if (ext === "md" || ext === "markdown") return "md";
+  if (ext === "docx") return "docx";
+  if (ext === "pdf") return "pdf";
+  if (ext === "txt" || ext === "text" || ext === "csv" || ext === "json") return "txt";
+  return null;
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // reader.result is a data: URL — strip the "data:...;base64," prefix.
+      const result = reader.result as string;
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 const suggestions = [
   "Why did sales drop?",
   "Where should I spend ₦50k?",
@@ -97,6 +126,9 @@ function BrainPage() {
   const [draft, setDraft] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [recentChats, setRecentChats] = useState<
     Array<{ sessionId: string; preview: string; updatedAt: string }>
   >([]);
@@ -109,10 +141,15 @@ function BrainPage() {
   /** Draft text as it was the moment the mic was turned on — speech is
    *  appended after this, never overwrites what was already typed/said. */
   const baseDraftRef = useRef("");
-  /** Speech confirmed as final since the mic turned on, kept separate from
-   *  the current in-flight interim guess so each onresult tick can replace
-   *  just the interim tail without losing earlier finalized words. */
-  const finalizedRef = useRef("");
+  /** Speech confirmed as final since the mic turned on, keyed by the Web
+   *  Speech API's own result index rather than accumulated by string
+   *  concatenation. Some browsers (Chrome included) redeliver an
+   *  already-finalized result in a later onresult event — appending it
+   *  again (the old `finalizedRef.current += chunk` approach) is what
+   *  caused words/phrases to repeat. Writing into a fixed slot per result
+   *  index instead means a redelivered result just overwrites its own
+   *  slot with the same text, so nothing is ever duplicated. */
+  const finalizedChunksRef = useRef<string[]>([]);
 
   // Reload this session's saved messages whenever the active session
   // changes (first mount, or after "New chat"/"switch chat"). Without
@@ -120,7 +157,7 @@ function BrainPage() {
   // saved to Supabase the whole time — nothing ever read them back.
   useEffect(() => {
     let cancelled = false;
-    fetchChatHistoryFn({ data: { sessionId } })
+    fetchChatHistoryFn({ data: { accessToken: useAuth.getState().accessToken, sessionId } })
       .then((history) => {
         // Guard against a race where the user already sent a message (or
         // switched chats again) while this request was in flight — only
@@ -162,7 +199,7 @@ function BrainPage() {
     if (!SR) return;
 
     baseDraftRef.current = draft ? `${draft} ` : "";
-    finalizedRef.current = "";
+    finalizedChunksRef.current = [];
 
     const recognition = new SR();
     recognition.lang = "en-US";
@@ -177,12 +214,15 @@ function BrainPage() {
         if (!result) continue;
         const chunk = result[0].transcript;
         if (result.isFinal) {
-          finalizedRef.current += (finalizedRef.current ? " " : "") + chunk.trim();
+          // Overwrite this result's own slot — if the browser redelivers
+          // the same finalized result later, this is a no-op rather than a
+          // duplicate.
+          finalizedChunksRef.current[i] = chunk.trim();
         } else {
           interim += chunk;
         }
       }
-      const finalized = finalizedRef.current;
+      const finalized = finalizedChunksRef.current.filter(Boolean).join(" ");
       setDraft(baseDraftRef.current + finalized + (finalized && interim ? " " : "") + interim);
     };
     recognition.onend = () => setListening(false);
@@ -192,12 +232,49 @@ function BrainPage() {
     setListening(true);
   }
 
+  /** Actually uploads the chosen file and turns it into a removable chip
+   *  above the composer — it used to just dump "📎 filename" as literal
+   *  text into the prompt box, mixed in with whatever the user was typing,
+   *  which is exactly the bug that was reported. Now the draft stays pure
+   *  user text, and the file becomes real, structured context the agent
+   *  can actually read (see /api/chat's use of previewText). */
   function handleFileChosen(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) {
-      setDraft((d) => (d ? `${d} 📎 ${file.name}` : `📎 ${file.name}`));
-    }
     e.target.value = "";
+    if (!file) return;
+
+    setAttachError(null);
+    const format = formatFromFilename(file.name);
+    if (!format) {
+      setAttachError(
+        `Can't attach .${file.name.split(".").pop()} files — try .txt, .md, .docx or .pdf.`,
+      );
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setAttachError("That file is too large (15MB max).");
+      return;
+    }
+
+    setUploadingAttachment(true);
+    fileToBase64(file)
+      .then((base64Content) =>
+        fetch("/api/documents/upload", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId, filename: file.name, format, base64Content }),
+        }),
+      )
+      .then(async (res) => {
+        const body = (await res.json()) as { document?: ChatAttachment; error?: string };
+        if (!res.ok || !body.document) throw new Error(body.error ?? "Upload failed");
+        setPendingAttachment(body.document);
+      })
+      .catch((err) => {
+        console.error("[chat] file upload failed", err);
+        setAttachError("Couldn't upload that file — try again.");
+      })
+      .finally(() => setUploadingAttachment(false));
   }
 
   return (
@@ -243,7 +320,7 @@ function BrainPage() {
               onClick={() => {
                 setHistoryOpen((v) => !v);
                 if (!historyOpen) {
-                  listChatSessionsFn()
+                  listChatSessionsFn({ data: { accessToken: useAuth.getState().accessToken } })
                     .then(setRecentChats)
                     .catch((err) => console.error("[chat] failed to list sessions", err));
                 }
@@ -265,7 +342,7 @@ function BrainPage() {
             </button>
 
             {historyOpen ? (
-              <div className="glass absolute right-4 top-full z-20 mt-1 max-h-72 w-72 overflow-y-auto rounded-2xl p-2 shadow-xl">
+              <div className="glass-solid absolute right-4 top-full z-20 mt-1 max-h-72 w-72 overflow-y-auto rounded-2xl p-2 shadow-xl">
                 <p className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
                   Recent chats
                 </p>
@@ -384,119 +461,150 @@ function BrainPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              sendMessage(draft);
+              sendMessage(draft, pendingAttachment ?? undefined);
               setDraft("");
+              setPendingAttachment(null);
             }}
-            className="flex shrink-0 items-center gap-2 p-4"
+            className="flex shrink-0 flex-col gap-2 p-4"
           >
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setMenuOpen((o) => !o)}
-                aria-label="Add attachment or shortcut"
-                aria-expanded={menuOpen}
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-white/8 hover:text-foreground"
-              >
-                <Plus className={cn("h-4 w-4 transition-transform", menuOpen && "rotate-45")} />
-              </button>
-
-              <AnimatePresence>
-                {menuOpen ? (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setMenuOpen(false)}
-                      aria-hidden
-                    />
-                    <motion.div
-                      initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                      transition={{ duration: 0.15 }}
-                      className="glass absolute bottom-full left-0 z-50 mb-2 w-60 overflow-hidden p-1.5"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          fileInputRef.current?.click();
-                          setMenuOpen(false);
-                        }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-white/8"
-                      >
-                        <Paperclip className="h-4 w-4 text-muted-foreground" />
-                        Attach a file
-                      </button>
-                      <Link
-                        to="/goals"
-                        onClick={() => setMenuOpen(false)}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-white/8"
-                      >
-                        <Target className="h-4 w-4 text-muted-foreground" />
-                        Set a goal
-                      </Link>
-                      <Link
-                        to="/settings"
-                        onClick={() => setMenuOpen(false)}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-white/8"
-                      >
-                        <Plug className="h-4 w-4 text-muted-foreground" />
-                        Connect a source
-                      </Link>
-                    </motion.div>
-                  </>
+            {pendingAttachment || uploadingAttachment || attachError ? (
+              <div className="flex flex-wrap items-center gap-2 px-1">
+                {uploadingAttachment ? (
+                  <span className="glass flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Uploading…
+                  </span>
                 ) : null}
-              </AnimatePresence>
+                {pendingAttachment ? (
+                  <span className="glass flex items-center gap-1.5 rounded-full py-1.5 pl-3 pr-1.5 text-xs">
+                    <Paperclip className="h-3 w-3 text-muted-foreground" />
+                    <span className="max-w-[14rem] truncate">{pendingAttachment.filename}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPendingAttachment(null)}
+                      aria-label="Remove attachment"
+                      className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-white/12 hover:text-foreground"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ) : null}
+                {attachError ? (
+                  <span className="text-xs text-destructive">{attachError}</span>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((o) => !o)}
+                  aria-label="Add attachment or shortcut"
+                  aria-expanded={menuOpen}
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-white/8 hover:text-foreground"
+                >
+                  <Plus className={cn("h-4 w-4 transition-transform", menuOpen && "rotate-45")} />
+                </button>
+
+                <AnimatePresence>
+                  {menuOpen ? (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setMenuOpen(false)}
+                        aria-hidden
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        className="glass-solid absolute bottom-full left-0 z-50 mb-2 w-60 overflow-hidden p-1.5"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            fileInputRef.current?.click();
+                            setMenuOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-white/8"
+                        >
+                          <Paperclip className="h-4 w-4 text-muted-foreground" />
+                          Attach a file
+                        </button>
+                        <Link
+                          to="/goals"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-white/8"
+                        >
+                          <Target className="h-4 w-4 text-muted-foreground" />
+                          Set a goal
+                        </Link>
+                        <Link
+                          to="/settings"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-white/8"
+                        >
+                          <Plug className="h-4 w-4 text-muted-foreground" />
+                          Connect a source
+                        </Link>
+                      </motion.div>
+                    </>
+                  ) : null}
+                </AnimatePresence>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,.md,.markdown,.docx,.pdf,.csv,.json"
+                  onChange={handleFileChosen}
+                  className="hidden"
+                />
+              </div>
 
               <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleFileChosen}
-                className="hidden"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Ask ADUF anything..."
+                className="min-w-0 flex-1 rounded-full bg-white/8 px-4 py-2.5 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
               />
+
+              <button
+                type="button"
+                onClick={toggleMic}
+                disabled={!speechSupported}
+                aria-pressed={listening}
+                aria-label={listening ? "Stop voice input" : "Voice input"}
+                title={
+                  speechSupported
+                    ? listening
+                      ? "Stop listening"
+                      : "Speak to ADUF"
+                    : "Voice input isn't supported in this browser"
+                }
+                className={cn(
+                  "relative grid h-10 w-10 shrink-0 place-items-center rounded-full border transition-colors",
+                  listening
+                    ? "border-cyan/60 bg-cyan/15 text-cyan"
+                    : "border-border text-muted-foreground hover:bg-white/8 hover:text-foreground",
+                  !speechSupported && "cursor-not-allowed opacity-40",
+                )}
+              >
+                {listening ? (
+                  <span className="animate-ripple absolute inset-0 rounded-full bg-cyan/60" />
+                ) : null}
+                <Mic className="relative h-4 w-4" />
+              </button>
+
+              <button
+                type="submit"
+                aria-label="Send message"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full transition-transform hover:scale-105"
+                style={{ background: "var(--gradient-accent)" }}
+              >
+                <Send className="h-4 w-4 text-background" />
+              </button>
             </div>
-
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Ask ADUF anything..."
-              className="min-w-0 flex-1 rounded-full bg-white/8 px-4 py-2.5 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
-            />
-
-            <button
-              type="button"
-              onClick={toggleMic}
-              disabled={!speechSupported}
-              aria-pressed={listening}
-              aria-label={listening ? "Stop voice input" : "Voice input"}
-              title={
-                speechSupported
-                  ? listening
-                    ? "Stop listening"
-                    : "Speak to ADUF"
-                  : "Voice input isn't supported in this browser"
-              }
-              className={cn(
-                "relative grid h-10 w-10 shrink-0 place-items-center rounded-full border transition-colors",
-                listening
-                  ? "border-cyan/60 bg-cyan/15 text-cyan"
-                  : "border-border text-muted-foreground hover:bg-white/8 hover:text-foreground",
-                !speechSupported && "cursor-not-allowed opacity-40",
-              )}
-            >
-              {listening ? (
-                <span className="animate-ripple absolute inset-0 rounded-full bg-cyan/60" />
-              ) : null}
-              <Mic className="relative h-4 w-4" />
-            </button>
-
-            <button
-              type="submit"
-              aria-label="Send message"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-full transition-transform hover:scale-105"
-              style={{ background: "var(--gradient-accent)" }}
-            >
-              <Send className="h-4 w-4 text-background" />
-            </button>
           </form>
         </GlassCard>
       </div>

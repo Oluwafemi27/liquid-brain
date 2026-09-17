@@ -1,5 +1,5 @@
 import "@tanstack/react-start/server-only";
-import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin } from "./supabase";
 import { activateN8nWorkflow, deactivateN8nWorkflow, deployN8nWorkflow } from "./n8n-client";
 import { getDeployableTemplateJson } from "./n8n-templates";
 import { buildWorkflowFromBrief } from "./n8n-builder";
@@ -39,13 +39,13 @@ function fromRow(row: Record<string, unknown>): N8nDeployment {
   };
 }
 
-export async function listN8nDeployments(): Promise<N8nDeployment[]> {
+export async function listN8nDeployments(userId: string): Promise<N8nDeployment[]> {
   const db = getSupabaseAdmin();
   if (!db) return [];
   const { data, error } = await db
     .from("n8n_deployments")
     .select(SELECT_COLS)
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .order("deployed_at", { ascending: false });
   if (error) return [];
   return (data ?? []).map(fromRow);
@@ -56,14 +56,17 @@ export async function listN8nDeployments(): Promise<N8nDeployment[]> {
  *  the row is created with status 'inactive' and safe_mode true, and the
  *  UI must show "I built it. Want me to turn it on?" rather than any
  *  auto-activation path. Nothing here ever sets active: true. */
-export async function createSafeModeDeployment(input: {
-  name: string;
-  reasoning: string;
-  automationId?: string | undefined;
-  templateId?: string | undefined;
-  buildBrief?: string | undefined;
-  generatedJson?: Record<string, unknown> | undefined;
-}): Promise<N8nDeployment> {
+export async function createSafeModeDeployment(
+  userId: string,
+  input: {
+    name: string;
+    reasoning: string;
+    automationId?: string | undefined;
+    templateId?: string | undefined;
+    buildBrief?: string | undefined;
+    generatedJson?: Record<string, unknown> | undefined;
+  },
+): Promise<N8nDeployment> {
   const db = getSupabaseAdmin();
   if (!db) throw new Error("No backend configured.");
 
@@ -99,7 +102,7 @@ export async function createSafeModeDeployment(input: {
   const { data, error } = await db
     .from("n8n_deployments")
     .insert({
-      workspace_id: DEFAULT_WORKSPACE_ID,
+      user_id: userId,
       automation_id: input.automationId ?? null,
       template_id: input.templateId ?? null,
       n8n_workflow_id: n8nWorkflowId,
@@ -119,38 +122,51 @@ export async function createSafeModeDeployment(input: {
 /** The ONLY path that turns a workflow on — called exclusively from the
  *  owner tapping "Turn it on" in the UI (see automations.tsx), never
  *  automatically. */
-export async function activateDeployment(deploymentId: string): Promise<N8nDeployment> {
+export async function activateDeployment(
+  userId: string,
+  deploymentId: string,
+): Promise<N8nDeployment> {
   const db = getSupabaseAdmin();
   if (!db) throw new Error("No backend configured.");
   const { data: row } = await db
     .from("n8n_deployments")
     .select(SELECT_COLS)
     .eq("id", deploymentId)
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .single();
   if (!row) throw new Error("Deployment not found.");
   const deployment = fromRow(row);
-  if (!deployment.n8nWorkflowId) throw new Error("This deployment failed to reach n8n — nothing to activate.");
+  if (!deployment.n8nWorkflowId)
+    throw new Error("This deployment failed to reach n8n — nothing to activate.");
 
   await activateN8nWorkflow(deployment.n8nWorkflowId);
 
   const { data, error } = await db
     .from("n8n_deployments")
-    .update({ status: "active", activated_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({
+      status: "active",
+      activated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", deploymentId)
+    .eq("user_id", userId)
     .select(SELECT_COLS)
     .single();
   if (error || !data) throw new Error("Activated on n8n but failed to update local status.");
   return fromRow(data);
 }
 
-export async function deactivateDeployment(deploymentId: string): Promise<N8nDeployment> {
+export async function deactivateDeployment(
+  userId: string,
+  deploymentId: string,
+): Promise<N8nDeployment> {
   const db = getSupabaseAdmin();
   if (!db) throw new Error("No backend configured.");
   const { data: row } = await db
     .from("n8n_deployments")
     .select(SELECT_COLS)
     .eq("id", deploymentId)
+    .eq("user_id", userId)
     .single();
   if (!row) throw new Error("Deployment not found.");
   const deployment = fromRow(row);
@@ -160,6 +176,7 @@ export async function deactivateDeployment(deploymentId: string): Promise<N8nDep
     .from("n8n_deployments")
     .update({ status: "inactive", updated_at: new Date().toISOString() })
     .eq("id", deploymentId)
+    .eq("user_id", userId)
     .select(SELECT_COLS)
     .single();
   if (error || !data) throw new Error("Failed to update local status.");

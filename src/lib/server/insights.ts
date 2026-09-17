@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 import type { Insight, InsightSeverity } from "@/lib/aduf-types";
-import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin } from "./supabase";
 
 interface InsightRow {
   id: string;
@@ -26,17 +26,17 @@ function fromRow(row: InsightRow): Insight {
   };
 }
 
-/** Every insight for the workspace, newest first. Returns [] if no backend
- *  is configured — the app runs fine without persistence, notifications
- *  just won't survive a reload. */
-export async function listInsights(): Promise<Insight[]> {
+/** Every insight belonging to this user, newest first. Returns [] if no
+ *  backend is configured — the app runs fine without persistence,
+ *  notifications just won't survive a reload. */
+export async function listInsights(userId: string): Promise<Insight[]> {
   const db = getSupabaseAdmin();
   if (!db) return [];
 
   const { data, error } = await db
     .from("insights")
     .select(SELECT_COLUMNS)
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error) {
     console.error("[insights] failed to list insights", error);
@@ -45,25 +45,24 @@ export async function listInsights(): Promise<Insight[]> {
   return (data ?? []).map(fromRow);
 }
 
-/** Logs a new insight to the feed. Called from every place in the app that
- *  used to splice a locally-generated insight into Zustand directly (goal
- *  hit, automation ran, source connected, workflow deployed, event
- *  scheduled, ...) — now every one of those goes through here so the
- *  Notifications page (and any other open tab/device) picks it up via the
- *  realtime subscription in NotificationsBootstrap. */
-export async function createInsight(input: {
-  title: string;
-  body: string;
-  severity: InsightSeverity;
-  source: string;
-}): Promise<Insight | null> {
+/** Logs a new insight to this user's feed. Called from every place in the
+ *  app that used to splice a locally-generated insight into Zustand
+ *  directly (goal hit, automation ran, source connected, workflow
+ *  deployed, event scheduled, ...) — now every one of those goes through
+ *  here so the Notifications page (and any other open tab/device of this
+ *  same user) picks it up via the realtime subscription in
+ *  NotificationsBootstrap. */
+export async function createInsight(
+  userId: string,
+  input: { title: string; body: string; severity: InsightSeverity; source: string },
+): Promise<Insight | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
 
   const { data, error } = await db
     .from("insights")
     .insert({
-      workspace_id: DEFAULT_WORKSPACE_ID,
+      user_id: userId,
       title: input.title,
       body: input.body,
       severity: input.severity,
@@ -78,14 +77,14 @@ export async function createInsight(input: {
   return fromRow(data);
 }
 
-export async function markInsightRead(id: string): Promise<Insight | null> {
+export async function markInsightRead(userId: string, id: string): Promise<Insight | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
 
   const { data, error } = await db
     .from("insights")
     .update({ read: true })
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .eq("id", id)
     .select(SELECT_COLUMNS)
     .single();
@@ -96,14 +95,14 @@ export async function markInsightRead(id: string): Promise<Insight | null> {
   return fromRow(data);
 }
 
-export async function markAllInsightsRead(): Promise<boolean> {
+export async function markAllInsightsRead(userId: string): Promise<boolean> {
   const db = getSupabaseAdmin();
   if (!db) return false;
 
   const { error } = await db
     .from("insights")
     .update({ read: true })
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .eq("read", false);
   if (error) {
     console.error("[insights] failed to mark all insights read", error);
@@ -112,15 +111,11 @@ export async function markAllInsightsRead(): Promise<boolean> {
   return true;
 }
 
-export async function dismissInsight(id: string): Promise<boolean> {
+export async function dismissInsight(userId: string, id: string): Promise<boolean> {
   const db = getSupabaseAdmin();
   if (!db) return false;
 
-  const { error } = await db
-    .from("insights")
-    .delete()
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
-    .eq("id", id);
+  const { error } = await db.from("insights").delete().eq("user_id", userId).eq("id", id);
   if (error) {
     console.error("[insights] failed to dismiss insight", error);
     return false;

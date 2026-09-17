@@ -22,6 +22,12 @@ import {
 import { getSurvey, saveSurvey, verifyAccessToken, type BusinessSurvey } from "@/lib/server/survey";
 import { getAdminOverview, isAdminEmail, listAllUsers, setAdminStatus } from "@/lib/server/admin";
 import {
+  adminDeleteGoal,
+  adminListAllAutomations,
+  adminListAllGoals,
+  adminSetAutomationEnabled,
+} from "@/lib/server/admin";
+import {
   activateDeployment,
   createSafeModeDeployment,
   deactivateDeployment,
@@ -44,6 +50,15 @@ import {
   toggleScheduleEventDone,
 } from "@/lib/server/schedule";
 
+/** Every function below that touches per-user data (chats, automations,
+ *  goals, insights, schedule, n8n deployments) requires an `accessToken`
+ *  from the caller and re-derives the real user id from it via
+ *  verifyAccessToken — the same "never trust what the client claims"
+ *  pattern already used by the survey/admin functions. A missing or
+ *  invalid token means "not signed in", so reads quietly return empty
+ *  results and writes throw — there is no per-user data to leak or write
+ *  to without a verified identity. */
+
 export const fetchConnectorStatuses = createServerFn({ method: "GET" }).handler(async () => {
   return getConnectorStatuses();
 });
@@ -53,83 +68,129 @@ export const fetchMemoryGraphFn = createServerFn({ method: "GET" }).handler(asyn
   return getMemoryGraph();
 });
 
-export const fetchGoals = createServerFn({ method: "GET" }).handler(async () => {
-  return listGoals();
-});
+export const fetchGoals = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return [];
+    return listGoals(user.id);
+  });
 
-export const fetchAutomations = createServerFn({ method: "GET" }).handler(async () => {
-  return listAutomations();
-});
+export const fetchAutomations = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return [];
+    return listAutomations(user.id);
+  });
 
 export const setAutomationEnabledFn = createServerFn({ method: "POST" })
-  .validator((data: { id: string; enabled: boolean }) => data)
+  .validator((data: { accessToken: string | null; id: string; enabled: boolean }) => data)
   .handler(async ({ data }) => {
-    return setAutomationEnabled(data.id, data.enabled);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    return setAutomationEnabled(user.id, data.id, data.enabled);
   });
 
 export const createAutomationFn = createServerFn({ method: "POST" })
   .validator(
-    (data: { name: string; trigger: string; action: string; goalTitle?: string | undefined }) =>
-      data,
+    (data: {
+      accessToken: string | null;
+      name: string;
+      trigger: string;
+      action: string;
+      goalTitle?: string | undefined;
+    }) => data,
   )
   .handler(async ({ data }) => {
-    return createAutomation(data);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    const { accessToken: _accessToken, ...input } = data;
+    return createAutomation(user.id, input);
   });
 
 export const runAutomationFn = createServerFn({ method: "POST" })
-  .validator((data: { automationId: string }) => data)
+  .validator((data: { accessToken: string | null; automationId: string }) => data)
   .handler(async ({ data }) => {
-    return runAutomation(data.automationId);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    return runAutomation(user.id, data.automationId);
   });
 
 export const listAutomationRunsFn = createServerFn({ method: "POST" })
-  .validator((data: { automationId: string }) => data)
+  .validator((data: { accessToken: string | null; automationId: string }) => data)
   .handler(async ({ data }) => {
-    return listAutomationRuns(data.automationId);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return [];
+    return listAutomationRuns(user.id, data.automationId);
   });
 
 export const createGoalFn = createServerFn({ method: "POST" })
-  .validator((data: { title: string; target: number; currency: string }) => data)
+  .validator(
+    (data: { accessToken: string | null; title: string; target: number; currency: string }) => data,
+  )
   .handler(async ({ data }) => {
-    return createGoal(data.title, data.target, data.currency);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    return createGoal(user.id, data.title, data.target, data.currency);
   });
 
 export const bumpGoalFn = createServerFn({ method: "POST" })
-  .validator((data: { goalId: string; amount: number }) => data)
+  .validator((data: { accessToken: string | null; goalId: string; amount: number }) => data)
   .handler(async ({ data }) => {
-    return bumpGoal(data.goalId, data.amount);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    return bumpGoal(user.id, data.goalId, data.amount);
   });
 
 export const updateGoalFn = createServerFn({ method: "POST" })
   .validator(
-    (data: { goalId: string; title?: string; target?: number; currency?: string; due?: string }) =>
-      data,
+    (data: {
+      accessToken: string | null;
+      goalId: string;
+      title?: string;
+      target?: number;
+      currency?: string;
+      due?: string;
+    }) => data,
   )
   .handler(async ({ data }) => {
-    const { goalId, ...patch } = data;
-    return updateGoal(goalId, patch);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    const { goalId, accessToken: _accessToken, ...patch } = data;
+    return updateGoal(user.id, goalId, patch);
   });
 
 export const fetchChatHistoryFn = createServerFn({ method: "POST" })
-  .validator((data: { sessionId: string }) => data)
+  .validator((data: { accessToken: string | null; sessionId: string }) => data)
   .handler(async ({ data }) => {
-    return fetchChatHistoryImpl(data.sessionId);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return [];
+    return fetchChatHistoryImpl(user.id, data.sessionId);
   });
 
-export const listChatSessionsFn = createServerFn({ method: "GET" }).handler(async () => {
-  return listChatSessionsImpl();
-});
+export const listChatSessionsFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return [];
+    return listChatSessionsImpl(user.id);
+  });
 
 export const toggleGoalSubTaskFn = createServerFn({ method: "POST" })
-  .validator((data: { goalId: string; taskId: string }) => data)
+  .validator((data: { accessToken: string | null; goalId: string; taskId: string }) => data)
   .handler(async ({ data }) => {
-    return toggleGoalSubTask(data.goalId, data.taskId);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    return toggleGoalSubTask(user.id, data.goalId, data.taskId);
   });
 
 export const deleteGoalFn = createServerFn({ method: "POST" })
-  .validator((data: { goalId: string }) => data)
+  .validator((data: { accessToken: string | null; goalId: string }) => data)
   .handler(async ({ data }) => {
-    return { ok: await deleteGoal(data.goalId) };
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return { ok: false };
+    return { ok: await deleteGoal(user.id, data.goalId) };
   });
 
 /** Returns "unconfigured" | "pending" | "done" — never trusts a userId the
@@ -184,11 +245,51 @@ export const adminAnalyticsFn = createServerFn({ method: "POST" })
     return getAdminAnalytics(data.accessToken);
   });
 
+/** Admin-only, cross-user. Distinct from fetchAutomations/fetchGoals above,
+ *  which are correctly scoped to the caller's own data now that
+ *  automations/goals are per-user — the admin panel needs everyone's, each
+ *  tagged with its real owner, which is what these return instead. */
+export const adminListAutomationsFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string }) => data)
+  .handler(async ({ data }) => {
+    return adminListAllAutomations(data.accessToken);
+  });
+
+export const adminSetAutomationEnabledFn = createServerFn({ method: "POST" })
+  .validator(
+    (data: { accessToken: string; ownerId: string; automationId: string; enabled: boolean }) =>
+      data,
+  )
+  .handler(async ({ data }) => {
+    return adminSetAutomationEnabled(
+      data.accessToken,
+      data.ownerId,
+      data.automationId,
+      data.enabled,
+    );
+  });
+
+export const adminListGoalsFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string }) => data)
+  .handler(async ({ data }) => {
+    return adminListAllGoals(data.accessToken);
+  });
+
+export const adminDeleteGoalFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string; ownerId: string; goalId: string }) => data)
+  .handler(async ({ data }) => {
+    return adminDeleteGoal(data.accessToken, data.ownerId, data.goalId);
+  });
+
 // === n8n integration ===
 
-export const fetchN8nDeployments = createServerFn({ method: "GET" }).handler(async () => {
-  return listN8nDeployments();
-});
+export const fetchN8nDeployments = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return [];
+    return listN8nDeployments(user.id);
+  });
 
 export const searchN8nTemplatesFn = createServerFn({ method: "POST" })
   .validator((data: { query: string }) => data)
@@ -202,6 +303,7 @@ export const searchN8nTemplatesFn = createServerFn({ method: "POST" })
 export const deployN8nWorkflowFn = createServerFn({ method: "POST" })
   .validator(
     (data: {
+      accessToken: string | null;
       name: string;
       reasoning: string;
       automationId?: string | undefined;
@@ -210,67 +312,100 @@ export const deployN8nWorkflowFn = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }) => {
-    return createSafeModeDeployment(data);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) throw new Error("Not signed in.");
+    const { accessToken: _accessToken, ...input } = data;
+    return createSafeModeDeployment(user.id, input);
   });
 
-/** The only path that turns a deployed workflow on — always an explicit,
- *  separate owner action after "I built it. Want me to turn it on?". */
+/** The only path that turns a workflow on — always an explicit, separate
+ *  owner action after "I built it. Want me to turn it on?". */
 export const activateN8nDeploymentFn = createServerFn({ method: "POST" })
-  .validator((data: { deploymentId: string }) => data)
+  .validator((data: { accessToken: string | null; deploymentId: string }) => data)
   .handler(async ({ data }) => {
-    return activateDeployment(data.deploymentId);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) throw new Error("Not signed in.");
+    return activateDeployment(user.id, data.deploymentId);
   });
 
 export const deactivateN8nDeploymentFn = createServerFn({ method: "POST" })
-  .validator((data: { deploymentId: string }) => data)
+  .validator((data: { accessToken: string | null; deploymentId: string }) => data)
   .handler(async ({ data }) => {
-    return deactivateDeployment(data.deploymentId);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) throw new Error("Not signed in.");
+    return deactivateDeployment(user.id, data.deploymentId);
   });
 
 // === Notifications (insights) ===
 
-export const fetchInsightsFn = createServerFn({ method: "GET" }).handler(async () => {
-  return listInsights();
-});
+export const fetchInsightsFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return [];
+    return listInsights(user.id);
+  });
 
 /** Logs a new insight — every "goal hit", "automation ran", "source
  *  connected" etc. moment in the app calls this instead of splicing a
  *  locally-generated one into Zustand, so it persists and syncs live to
- *  every open tab/device via NotificationsBootstrap's realtime subscription. */
+ *  every open tab/device (of this same user) via NotificationsBootstrap's
+ *  realtime subscription. */
 export const createInsightFn = createServerFn({ method: "POST" })
   .validator(
-    (data: { title: string; body: string; severity: "info" | "success" | "warning"; source: string }) =>
-      data,
+    (data: {
+      accessToken: string | null;
+      title: string;
+      body: string;
+      severity: "info" | "success" | "warning";
+      source: string;
+    }) => data,
   )
   .handler(async ({ data }) => {
-    return createInsight(data);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    const { accessToken: _accessToken, ...input } = data;
+    return createInsight(user.id, input);
   });
 
 export const markInsightReadFn = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { accessToken: string | null; id: string }) => data)
   .handler(async ({ data }) => {
-    return markInsightRead(data.id);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    return markInsightRead(user.id, data.id);
   });
 
-export const markAllInsightsReadFn = createServerFn({ method: "POST" }).handler(async () => {
-  return { ok: await markAllInsightsRead() };
-});
+export const markAllInsightsReadFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return { ok: false };
+    return { ok: await markAllInsightsRead(user.id) };
+  });
 
 export const dismissInsightFn = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { accessToken: string | null; id: string }) => data)
   .handler(async ({ data }) => {
-    return { ok: await dismissInsight(data.id) };
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return { ok: false };
+    return { ok: await dismissInsight(user.id, data.id) };
   });
 
 // === Schedule ===
 
-export const fetchScheduleEventsFn = createServerFn({ method: "GET" }).handler(async () => {
-  return listScheduleEvents();
-});
+export const fetchScheduleEventsFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return [];
+    return listScheduleEvents(user.id);
+  });
 
 export const createScheduleEventFn = createServerFn({ method: "POST" })
   .validator(
     (data: {
+      accessToken: string | null;
       title: string;
       day: "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
       startTime: string;
@@ -280,17 +415,24 @@ export const createScheduleEventFn = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }) => {
-    return createScheduleEvent(data);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    const { accessToken: _accessToken, ...input } = data;
+    return createScheduleEvent(user.id, input);
   });
 
 export const toggleScheduleEventDoneFn = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { accessToken: string | null; id: string }) => data)
   .handler(async ({ data }) => {
-    return toggleScheduleEventDone(data.id);
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    return toggleScheduleEventDone(user.id, data.id);
   });
 
 export const deleteScheduleEventFn = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { accessToken: string | null; id: string }) => data)
   .handler(async ({ data }) => {
-    return { ok: await deleteScheduleEvent(data.id) };
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return { ok: false };
+    return { ok: await deleteScheduleEvent(user.id, data.id) };
   });

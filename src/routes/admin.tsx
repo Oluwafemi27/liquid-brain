@@ -33,18 +33,22 @@ import { GlassCard } from "@/components/aduf/liquid";
 import { useAuth } from "@/store/auth-store";
 import {
   adminAnalyticsFn,
+  adminDeleteGoalFn,
+  adminListAutomationsFn,
+  adminListGoalsFn,
   adminListUsersFn,
   adminOverviewFn,
   adminSetAdminStatusFn,
+  adminSetAutomationEnabledFn,
   checkIsAdminFn,
-  deleteGoalFn,
-  fetchAutomations,
-  fetchGoals,
-  setAutomationEnabledFn,
 } from "@/lib/server-fns";
 import type { AdminAnalytics } from "@/lib/server/admin-analytics";
-import type { AdminOverview, AdminUserRow } from "@/lib/server/admin";
-import type { Automation, Goal } from "@/lib/aduf-types";
+import type {
+  AdminAutomationRow,
+  AdminGoalRow,
+  AdminOverview,
+  AdminUserRow,
+} from "@/lib/server/admin";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -107,11 +111,11 @@ function AdminPage() {
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
-  const [automations, setAutomations] = useState<Automation[]>([]);
+  const [automations, setAutomations] = useState<AdminAutomationRow[]>([]);
   const [automationsLoading, setAutomationsLoading] = useState(false);
   const [busyAutomationId, setBusyAutomationId] = useState<string | null>(null);
 
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const [goals, setGoals] = useState<AdminGoalRow[]>([]);
   const [goalsLoading, setGoalsLoading] = useState(false);
   const [deletingGoalId, setDeletingGoalId] = useState<string | null>(null);
 
@@ -153,14 +157,14 @@ function AdminPage() {
     }
     if (tab === "Automations" && automations.length === 0 && !automationsLoading) {
       setAutomationsLoading(true);
-      fetchAutomations()
+      adminListAutomationsFn({ data: { accessToken } })
         .then(setAutomations)
         .catch((err) => console.error("[admin] automations failed", err))
         .finally(() => setAutomationsLoading(false));
     }
     if (tab === "Goals" && goals.length === 0 && !goalsLoading) {
       setGoalsLoading(true);
-      fetchGoals()
+      adminListGoalsFn({ data: { accessToken } })
         .then(setGoals)
         .catch((err) => console.error("[admin] goals failed", err))
         .finally(() => setGoalsLoading(false));
@@ -188,23 +192,34 @@ function AdminPage() {
       .finally(() => setBusyEmail(null));
   }
 
-  function toggleAutomationEnabled(automation: Automation) {
+  function toggleAutomationEnabled(automation: AdminAutomationRow) {
+    if (!accessToken) return;
     setBusyAutomationId(automation.id);
-    setAutomationEnabledFn({ data: { id: automation.id, enabled: !automation.enabled } })
-      .then(() => {
-        setAutomations((prev) =>
-          prev.map((a) => (a.id === automation.id ? { ...a, enabled: !a.enabled } : a)),
-        );
+    adminSetAutomationEnabledFn({
+      data: {
+        accessToken,
+        ownerId: automation.ownerId,
+        automationId: automation.id,
+        enabled: !automation.enabled,
+      },
+    })
+      .then(({ ok }) => {
+        if (ok) {
+          setAutomations((prev) =>
+            prev.map((a) => (a.id === automation.id ? { ...a, enabled: !a.enabled } : a)),
+          );
+        }
       })
       .catch((err) => console.error("[admin] toggle automation failed", err))
       .finally(() => setBusyAutomationId(null));
   }
 
-  function confirmDeleteGoal(goalId: string) {
+  function confirmDeleteGoal(goal: AdminGoalRow) {
+    if (!accessToken) return;
     setDeletingGoalId(null);
-    setGoals((prev) => prev.filter((g) => g.id !== goalId));
-    deleteGoalFn({ data: { goalId } }).catch((err) =>
-      console.error("[admin] delete goal failed", err),
+    setGoals((prev) => prev.filter((g) => g.id !== goal.id));
+    adminDeleteGoalFn({ data: { accessToken, ownerId: goal.ownerId, goalId: goal.id } }).catch(
+      (err) => console.error("[admin] delete goal failed", err),
     );
   }
 
@@ -560,7 +575,8 @@ function AdminPage() {
             <div className="border-b border-border p-5">
               <h2 className="text-base font-semibold">All automations</h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Enable or disable any automation workspace-wide.
+                Every user's automations, each tagged with its owner. Enabling/disabling here only
+                affects that one user's automation.
               </p>
             </div>
             <div className="divide-y divide-border">
@@ -575,6 +591,9 @@ function AdminPage() {
                       <p className="truncate text-sm font-medium">{a.name}</p>
                       <p className="truncate text-xs text-muted-foreground">
                         {a.trigger} → {a.action} · {a.runs} {a.runs === 1 ? "run" : "runs"}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground/70">
+                        Owner: {a.ownerLabel}
                       </p>
                     </div>
                     <button
@@ -601,7 +620,8 @@ function AdminPage() {
             <div className="border-b border-border p-5">
               <h2 className="text-base font-semibold">All goals</h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Workspace-wide view. Deleting here removes the goal for everyone.
+                Every user's goals, each tagged with its owner. Deleting here removes that one
+                user's goal only.
               </p>
             </div>
             <div className="divide-y divide-border">
@@ -621,6 +641,9 @@ function AdminPage() {
                           {pct}% · {g.current.toLocaleString()} of {g.target.toLocaleString()}{" "}
                           {g.currency}
                         </p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground/70">
+                          Owner: {g.ownerLabel}
+                        </p>
                       </div>
                       {deletingGoalId === g.id ? (
                         <div className="flex shrink-0 items-center gap-2">
@@ -632,7 +655,7 @@ function AdminPage() {
                             <X className="h-3.5 w-3.5" />
                           </button>
                           <button
-                            onClick={() => confirmDeleteGoal(g.id)}
+                            onClick={() => confirmDeleteGoal(g)}
                             className="rounded-full bg-rose-400/90 px-3 py-1.5 text-xs font-medium text-background hover:bg-rose-400"
                           >
                             Confirm delete
