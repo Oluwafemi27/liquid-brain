@@ -680,3 +680,6 @@ alter publication supabase_realtime add table schedule_events;
 -- this is here even though 012 above already has these two lines: the
 -- live project was missing them despite 012 existing, so a fresh
 -- install from a version of this file predating this fix would be too.
+
+-- === Migration 014: Telegram connector ===
+-- See supabase/migrations/014_telegram_connector.sql (bot token in Vault, RLS on, service-role only).

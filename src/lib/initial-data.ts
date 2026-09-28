@@ -9,7 +9,7 @@ import type { DataSource, Insight, ScheduleEvent } from "./aduf-types";
 export const initialDataSources: DataSource[] = [
   { id: "shopify", name: "Shopify", category: "Commerce", connected: false },
   { id: "ga", name: "Google Analytics", category: "Traffic", connected: false },
-  { id: "whatsapp", name: "WhatsApp Business", category: "Messaging", connected: false },
+  { id: "telegram", name: "Telegram", category: "Messaging", connected: false },
   { id: "paystack", name: "Paystack", category: "Payments", connected: false },
   { id: "meta", name: "Meta Ads", category: "Advertising", connected: false },
   { id: "sheets", name: "Google Sheets", category: "Ops", connected: false },

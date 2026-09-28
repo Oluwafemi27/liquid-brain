@@ -7,14 +7,16 @@ import { GlassCard } from "@/components/aduf/liquid";
 import { ModelKeysPanel } from "@/components/aduf/model-keys-panel";
 import { N8nConnectionPanel } from "@/components/aduf/n8n-connection-panel";
 import { SkillsPanel } from "@/components/aduf/skills-panel";
+import { TelegramConnectionPanel } from "@/components/aduf/telegram-connection-panel";
 import { useAduf } from "@/store/aduf-store";
 import { useAuth } from "@/store/auth-store";
 import { checkIsAdminFn, fetchConnectorStatuses } from "@/lib/server-fns";
 
 /** Providers with a real OAuth redirect flow (see src/lib/server/oauth-providers.ts).
- *  Everything else (currently just Paystack, which is key-based) keeps the
- *  local demo "pour" animation until a real key-entry flow is built. */
-const OAUTH_SOURCE_IDS = new Set(["shopify", "ga", "meta", "whatsapp", "sheets"]);
+ *  Telegram is key-based and has its own panel below. Everything else
+ *  (currently just Paystack) keeps the local demo "pour" animation until a
+ *  real key-entry flow is built. */
+const OAUTH_SOURCE_IDS = new Set(["shopify", "ga", "meta", "sheets"]);
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -109,6 +111,17 @@ function SettingsPage() {
   }, [setSourceConnected]);
 
   const connect = (id: string) => {
+    if (id === "telegram") {
+      // Key-based: no redirect. Send them to the token form instead of faking a connect.
+      if (!isAdmin) {
+        setBanner({ kind: "error", text: "Only the workspace admin can connect Telegram." });
+        return;
+      }
+      document
+        .getElementById("telegram-panel")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     if (OAUTH_SOURCE_IDS.has(id) && configured[id]) {
       if (id === "shopify") {
         const shop = window.prompt("Your Shopify store domain (e.g. my-store):");
@@ -213,6 +226,13 @@ function SettingsPage() {
                 <Blocks className="h-4 w-4" /> Connections
               </h2>
               <N8nConnectionPanel />
+              {isAdmin ? (
+                <div id="telegram-panel" className="mt-4">
+                  <TelegramConnectionPanel
+                    onChange={(connected) => setSourceConnected("telegram", connected)}
+                  />
+                </div>
+              ) : null}
             </div>
 
             <div>
