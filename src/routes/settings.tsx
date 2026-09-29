@@ -1,0 +1,345 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { AnimatePresence, motion } from "framer-motion";
+import { BadgeCheck, Bell, Blocks, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AppShell, PageHeader } from "@/components/aduf/app-shell";
+import { KeyConnectorDialog } from "@/components/aduf/key-connector-dialog";
+import { GlassCard } from "@/components/aduf/liquid";
+import { ModelKeysPanel } from "@/components/aduf/model-keys-panel";
+import { N8nConnectionPanel } from "@/components/aduf/n8n-connection-panel";
+import { SkillsPanel } from "@/components/aduf/skills-panel";
+import { TelegramConnectionPanel } from "@/components/aduf/telegram-connection-panel";
+import { useAduf } from "@/store/aduf-store";
+import { useAuth } from "@/store/auth-store";
+import { OAUTH_CONNECTOR_IDS, isKeyConnector } from "@/lib/connector-catalog";
+import { checkIsAdminFn, fetchConnectorStatuses } from "@/lib/server-fns";
+
+/** Providers with a real OAuth redirect flow (see src/lib/server/oauth-providers.ts).
+ *  Pasted-credential providers (Semrush, Jumia, Paystack) open a dialog instead,
+ *  and Telegram has its own panel below. */
+const OAUTH_SOURCE_IDS = new Set<string>(OAUTH_CONNECTOR_IDS);
+
+export const Route = createFileRoute("/settings")({
+  head: () => ({
+    meta: [
+      { title: "Settings & Integrations — ADUF AI" },
+      {
+        name: "description",
+        content:
+          "Manage your ADUF profile, autonomy level and connected integrations — commerce, payments, ads and messaging in one place.",
+      },
+      { property: "og:title", content: "Settings & Integrations — ADUF AI" },
+      {
+        property: "og:description",
+        content: "Control how much ADUF can act on its own, and what it is connected to.",
+      },
+    ],
+  }),
+  component: SettingsPage,
+});
+
+const CONNECTOR_ERROR_COPY: Record<string, string> = {
+  not_configured: "This integration isn't set up yet — add its API app credentials on the server.",
+  not_oauth: "This integration connects with an API key, not a redirect — use the form below.",
+  backend_not_configured:
+    "No backend is connected yet, so ADUF can't securely store this connection.",
+  missing_shop: "Enter your shop domain to connect Shopify.",
+  invalid_shop: "That doesn't look like a Shopify store domain (e.g. my-store.myshopify.com).",
+  invalid_signature: "Shopify's response couldn't be verified — try connecting again.",
+  invalid_state: "That connection attempt expired or wasn't recognised — try again.",
+  expired_state: "That connection attempt expired — try again.",
+  provider_denied: "The connection was cancelled.",
+  token_exchange_failed: "The provider rejected that connection — try again.",
+  storage_failed: "Connected, but ADUF couldn't save it — try again.",
+  server_error: "Something went wrong starting that connection — try again.",
+  unknown_provider: "Unknown integration.",
+};
+
+function SettingsPage() {
+  const { sources, connectSource, setSourceConnected, userName, setUserName } = useAduf();
+  const { accessToken, status, signOut } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [pouring, setPouring] = useState<string | null>(null);
+  const [keyDialog, setKeyDialog] = useState<string | null>(null);
+  const [configured, setConfigured] = useState<Record<string, boolean>>({});
+  const [banner, setBanner] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+
+  // Only shows the Admin Panel link if this signed-in user is actually on
+  // the server-side admin allowlist — the link's absence isn't security by
+  // itself (the /admin route re-checks server-side too), just avoids
+  // showing a dead end to everyone else.
+  useEffect(() => {
+    if (status !== "signed-in" || !accessToken) {
+      setIsAdmin(false);
+      return;
+    }
+    checkIsAdminFn({ data: { accessToken } })
+      .then((res) => setIsAdmin(res.isAdmin))
+      .catch(() => setIsAdmin(false));
+  }, [status, accessToken]);
+
+  // Pull real connection state + which providers have OAuth apps registered.
+  useEffect(() => {
+    fetchConnectorStatuses()
+      .then((statuses) => {
+        setConfigured(
+          Object.fromEntries(Object.entries(statuses).map(([id, s]) => [id, s.configured])),
+        );
+        for (const [id, status] of Object.entries(statuses)) {
+          setSourceConnected(id, status.connected);
+        }
+      })
+      .catch(() => {
+        // No backend yet — sources stay whatever the local mock state says.
+      });
+  }, [setSourceConnected]);
+
+  // Surface the redirect back from /api/connectors/:provider/callback.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const error = params.get("connectorError");
+    const provider = params.get("provider");
+    if (connected) {
+      setSourceConnected(connected, true);
+      setBanner({ kind: "success", text: `${provider ?? connected} connected.` });
+    } else if (error) {
+      setBanner({
+        kind: "error",
+        text: CONNECTOR_ERROR_COPY[error] ?? "That connection didn't go through.",
+      });
+    }
+    if (connected || error) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [setSourceConnected]);
+
+  const connect = (id: string) => {
+    if (id === "telegram") {
+      // Key-based: no redirect. Send them to the token form instead of faking a connect.
+      if (!isAdmin) {
+        setBanner({ kind: "error", text: "Only the workspace admin can connect Telegram." });
+        return;
+      }
+      document
+        .getElementById("telegram-panel")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (isKeyConnector(id)) {
+      // Pasted credentials, stored encrypted server-side — admin only.
+      if (!isAdmin) {
+        setBanner({
+          kind: "error",
+          text: "Only the workspace admin can connect this integration.",
+        });
+        return;
+      }
+      setKeyDialog(id);
+      return;
+    }
+    if (OAUTH_SOURCE_IDS.has(id) && configured[id]) {
+      if (id === "shopify") {
+        const shop = window.prompt("Your Shopify store domain (e.g. my-store):");
+        if (!shop) return;
+        window.location.href = `/api/connectors/shopify/authorize?shop=${encodeURIComponent(shop)}`;
+        return;
+      }
+      window.location.href = `/api/connectors/${id}/authorize`;
+      return;
+    }
+    // OAuth app credentials not set yet: keep the local demo connect (see .env.example).
+    setPouring(id);
+    setTimeout(() => {
+      connectSource(id);
+      setPouring(null);
+    }, 1200);
+  };
+
+  const disconnect = async (id: string) => {
+    if (!accessToken || !isAdmin) {
+      setBanner({ kind: "error", text: "Only the workspace admin can disconnect integrations." });
+      return;
+    }
+    try {
+      const res = await fetch(`/api/connectors/${id}/manage`, {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
+      setSourceConnected(id, false);
+      setBanner({ kind: "success", text: "Disconnected." });
+    } catch (e) {
+      setBanner({
+        kind: "error",
+        text: e instanceof Error && e.message ? e.message : "Couldn't disconnect.",
+      });
+    }
+  };
+
+  return (
+    <AppShell>
+      <div className="mx-auto w-full max-w-md px-4 pt-4 pb-24 lg:max-w-[1500px] lg:px-6 lg:py-8">
+        <PageHeader eyebrow="Settings" title="You & your stack" />
+
+        {isAdmin ? (
+          <Link to="/admin" className="mb-4 block">
+            <GlassCard className="flex items-center gap-3 p-4">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-cyan/15 text-cyan">
+                <ShieldCheck className="h-4.5 w-4.5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Admin Panel</p>
+                <p className="text-xs text-muted-foreground">
+                  Manage users, admins, and workspace-wide stats
+                </p>
+              </div>
+            </GlassCard>
+          </Link>
+        ) : null}
+
+        {banner ? (
+          <GlassCard
+            hover={false}
+            className={`mb-4 min-h-16 rounded-2xl p-4 text-sm ${banner.kind === "success" ? "text-cyan" : "text-amber-400"}`}
+          >
+            {banner.text}
+          </GlassCard>
+        ) : null}
+
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <div className="space-y-4">
+            <GlassCard hover={false} className="min-h-16 rounded-2xl p-4 text-center sm:p-5">
+              <div
+                className="mx-auto grid h-12 w-12 place-items-center rounded-full sm:h-16 sm:w-16"
+                style={{ background: "var(--gradient-accent)" }}
+              >
+                <UserRound className="h-5 w-5 text-background sm:h-7 sm:w-7" />
+              </div>
+              <input
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
+                placeholder="Add your name"
+                className="mt-3 w-full rounded-full bg-white/8 px-3 py-2 text-center text-base font-semibold outline-none placeholder:text-base placeholder:font-normal placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-ring sm:text-lg"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">Owner</p>
+              {status === "signed-in" ? (
+                <button
+                  type="button"
+                  onClick={() => void signOut()}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-border py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-red-400/40 hover:bg-red-400/10 hover:text-red-400"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Sign out
+                </button>
+              ) : null}
+            </GlassCard>
+
+            {[
+              { icon: ShieldCheck, label: "Autonomy", value: "Not set" },
+              { icon: Bell, label: "Alerts", value: "Not set" },
+              { icon: BadgeCheck, label: "Plan", value: "Free" },
+            ].map(({ icon: Icon, label, value }, i) => (
+              <GlassCard
+                key={label}
+                delay={i * 0.05}
+                className="flex min-h-16 items-center gap-3 rounded-2xl p-4"
+              >
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+                  <p className="truncate text-sm">{value}</p>
+                </div>
+              </GlassCard>
+            ))}
+          </div>
+
+          <div className="min-w-0 space-y-5 sm:space-y-8">
+            <div>
+              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <Blocks className="h-4 w-4" /> Connections
+              </h2>
+              <N8nConnectionPanel />
+              {isAdmin ? (
+                <div id="telegram-panel" className="mt-4">
+                  <TelegramConnectionPanel
+                    onChange={(connected) => setSourceConnected("telegram", connected)}
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <div>
+              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <Blocks className="h-4 w-4" /> Integrations
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {sources.map((s, i) => (
+                  <GlassCard
+                    key={s.id}
+                    delay={i * 0.05}
+                    className="relative min-h-16 rounded-2xl p-4"
+                  >
+                    <AnimatePresence>
+                      {pouring === s.id ? (
+                        <motion.div
+                          initial={{ height: 0 }}
+                          animate={{ height: "100%" }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 1.1, ease: [0.2, 0.8, 0.2, 1] }}
+                          className="water-surface pointer-events-none absolute inset-x-0 bottom-0"
+                        />
+                      ) : null}
+                    </AnimatePresence>
+                    <div className="relative">
+                      <p className="text-xl font-semibold">{s.name}</p>
+                      <p className="mt-0.5 text-sm text-gray-400">{s.category}</p>
+                      <button
+                        onClick={() => !s.connected && connect(s.id)}
+                        disabled={s.connected || pouring === s.id}
+                        className="mt-4 w-full rounded-full px-4 py-2 text-xs font-medium"
+                        style={
+                          s.connected
+                            ? { border: "1px solid var(--border)" }
+                            : {
+                                background: "var(--gradient-accent)",
+                                color: "var(--background)",
+                              }
+                        }
+                      >
+                        {s.connected ? "Connected" : pouring === s.id ? "Pouring…" : "Connect"}
+                      </button>
+                      {s.connected && s.id !== "telegram" && isAdmin ? (
+                        <button
+                          type="button"
+                          onClick={() => void disconnect(s.id)}
+                          className="mt-2 w-full text-center text-[11px] text-muted-foreground hover:text-red-400"
+                        >
+                          Disconnect
+                        </button>
+                      ) : null}
+                    </div>
+                  </GlassCard>
+                ))}
+              </div>
+            </div>
+
+            <ModelKeysPanel />
+            <SkillsPanel />
+          </div>
+        </div>
+      </div>
+      <KeyConnectorDialog
+        providerId={keyDialog}
+        providerName={sources.find((x) => x.id === keyDialog)?.name ?? ""}
+        onClose={() => setKeyDialog(null)}
+        onConnected={(id) => {
+          setSourceConnected(id, true);
+          setBanner({ kind: "success", text: "Connected." });
+        }}
+      />
+    </AppShell>
+  );
+}
