@@ -34,6 +34,7 @@ import {
   listN8nDeployments,
 } from "@/lib/server/n8n-deployments";
 import { searchN8nTemplates } from "@/lib/server/n8n-templates";
+import { getAnalyticsSummary } from "@/lib/server/analytics";
 import { getMemoryGraph } from "@/lib/server/memory";
 import { getAdminAnalytics } from "@/lib/server/admin-analytics";
 import {
@@ -59,14 +60,35 @@ import {
  *  results and writes throw — there is no per-user data to leak or write
  *  to without a verified identity. */
 
-export const fetchConnectorStatuses = createServerFn({ method: "GET" }).handler(async () => {
-  return getConnectorStatuses();
-});
+/** Connection state is workspace-wide (one set of connected integrations),
+ *  but still only readable by a signed-in user. Returns null when signed out
+ *  so callers keep whatever they last knew instead of resetting to "off". */
+export const fetchConnectorStatuses = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    return getConnectorStatuses();
+  });
 
-/** Business Memory graph — real counts only, see lib/server/memory.ts. */
-export const fetchMemoryGraphFn = createServerFn({ method: "GET" }).handler(async () => {
-  return getMemoryGraph();
-});
+/** Business Memory graph — real counts only, scoped to the signed-in user,
+ *  see lib/server/memory.ts. */
+export const fetchMemoryGraphFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    return getMemoryGraph(user.id);
+  });
+
+/** Live analytics for the Analytics page — see lib/server/analytics.ts. */
+export const fetchAnalyticsSummaryFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    return getAnalyticsSummary(user.id);
+  });
 
 export const fetchGoals = createServerFn({ method: "POST" })
   .validator((data: { accessToken: string | null }) => data)

@@ -6,7 +6,6 @@ import {
   CalendarClock,
   Network,
   Settings,
-  Sparkles,
   Target,
   Waves,
 } from "lucide-react";
@@ -14,9 +13,12 @@ import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { useAduf } from "@/store/aduf-store";
 import { useAuth } from "@/store/auth-store";
+import { BrandLogo } from "./brand-logo";
 import { LiquidBackground } from "./liquid";
 import { AuthBootstrap } from "./auth-bootstrap";
+import { AnalyticsBootstrap } from "./analytics-bootstrap";
 import { AutomationsBootstrap } from "./automations-bootstrap";
+import { ConnectorsBootstrap } from "./connectors-bootstrap";
 import { GoalsBootstrap } from "./goals-bootstrap";
 import { MemoryBootstrap } from "./memory-bootstrap";
 import { NotificationsBootstrap } from "./notifications-bootstrap";
@@ -156,7 +158,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <AuthBootstrap />
       <GoalsBootstrap />
       <AutomationsBootstrap />
+      <ConnectorsBootstrap />
       <MemoryBootstrap />
+      <AnalyticsBootstrap />
       <NotificationsBootstrap />
       <ScheduleBootstrap />
       <SignInModal />
@@ -166,12 +170,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className="glass fixed left-4 top-4 bottom-4 z-30 hidden w-[236px] flex-col rounded-3xl p-4 lg:flex">
         <div className="flex items-center justify-between gap-2 px-1 py-2">
           <div className="flex min-w-0 items-center gap-2">
-            <div
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl"
-              style={{ background: "var(--gradient-accent)" }}
-            >
-              <Sparkles className="h-4 w-4 text-background" />
-            </div>
+            <BrandLogo className="h-8 w-8" />
             <p className="truncate font-display text-sm font-semibold">ADUF AI</p>
           </div>
         </div>
@@ -227,12 +226,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <header className="glass fixed inset-x-0 top-0 z-30 flex items-center justify-between gap-3 rounded-none px-4 pb-2 pt-[env(safe-area-inset-top)] lg:hidden">
         <div className="flex min-w-0 items-center gap-2">
-          <div
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg"
-            style={{ background: "var(--gradient-accent)" }}
-          >
-            <Sparkles className="h-3.5 w-3.5 text-background" />
-          </div>
+          <BrandLogo className="h-7 w-7" />
           <p className="truncate font-display text-xs font-semibold">ADUF AI</p>
         </div>
         <div className="flex min-w-0 items-center gap-1">

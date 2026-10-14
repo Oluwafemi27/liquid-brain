@@ -323,3 +323,29 @@ export interface ScheduleEvent {
   notes: string;
   done: boolean;
 }
+
+/** One month of real automation activity, from the `automation_runs` table. */
+export interface ActivityMonth {
+  month: string;
+  runs: number;
+  success: number;
+  failed: number;
+}
+
+export interface AutomationActivity {
+  id: string;
+  name: string;
+  runs: number;
+  failed: number;
+}
+
+/** Live analytics computed server-side from rows ADUF actually recorded for
+ *  this user — never from simulated or placeholder numbers. */
+export interface AnalyticsSummary {
+  months: ActivityMonth[];
+  totalRuns: number;
+  successRate: number | null; // 0-100, null when there are no runs yet
+  topAutomations: AutomationActivity[];
+  goals: { total: number; completed: number; avgProgress: number };
+  generatedAt: string;
+}

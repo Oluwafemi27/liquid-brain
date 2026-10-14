@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sparkles } from "lucide-react";
+import { BrandLogo } from "./brand-logo";
 import {
   Dialog,
   DialogContent,
@@ -58,12 +58,7 @@ export function SignInModal() {
     <Dialog open={signInModalOpen} onOpenChange={(open) => !open && closeSignIn()}>
       <DialogContent className="glass max-w-sm border-border bg-background/95 text-foreground">
         <DialogHeader className="items-center text-center">
-          <div
-            className="grid h-11 w-11 place-items-center rounded-2xl"
-            style={{ background: "var(--gradient-accent)" }}
-          >
-            <Sparkles className="h-5 w-5 text-background" />
-          </div>
+          <BrandLogo className="h-11 w-11" />
           <DialogTitle className="mt-2 text-lg">Sign in to talk to ADUF</DialogTitle>
           <DialogDescription className="text-center">
             You can look around the dashboard freely, but chatting with ADUF — or running an

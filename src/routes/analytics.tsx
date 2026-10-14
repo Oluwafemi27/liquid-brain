@@ -63,8 +63,119 @@ function EmptyPanel({ label }: { label: string }) {
   );
 }
 
+const tooltipStyle = {
+  background: "var(--popover)",
+  border: "1px solid var(--border)",
+  borderRadius: 14,
+  color: "var(--foreground)",
+};
+
+/** Real, live numbers: everything here is computed in Supabase from rows ADUF
+ *  actually recorded (automation runs, goals) and refreshes by itself — see
+ *  AnalyticsBootstrap. Nothing on this card is simulated. */
+function LiveActivity() {
+  const analytics = useAduf((s) => s.analytics);
+
+  if (!analytics) {
+    return (
+      <GlassCard hover={false} className="mb-6 min-h-40">
+        <EmptyPanel label="Loading your live activity…" />
+      </GlassCard>
+    );
+  }
+
+  const { months, totalRuns, successRate, topAutomations, goals } = analytics;
+  const tiles = [
+    { label: "Automation runs", value: totalRuns.toLocaleString(), hint: "Last 6 months" },
+    {
+      label: "Success rate",
+      value: successRate === null ? "—" : `${successRate}%`,
+      hint: successRate === null ? "No runs yet" : "Runs that finished cleanly",
+    },
+    { label: "Goal progress", value: `${goals.avgProgress}%`, hint: "Average across goals" },
+    {
+      label: "Goals completed",
+      value: `${goals.completed}/${goals.total}`,
+      hint: goals.total === 0 ? "No goals yet" : "Hit their target",
+    },
+  ];
+
+  return (
+    <div className="mb-6 space-y-6">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {tiles.map((t, i) => (
+          <GlassCard key={t.label} delay={i * 0.05} hover={false} className="p-4">
+            <p className="text-xs text-muted-foreground">{t.label}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">{t.value}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{t.hint}</p>
+          </GlassCard>
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <GlassCard hover={false} className="min-w-0">
+          <h2 className="text-base font-semibold">Automation activity</h2>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Runs per month · live from your workspace
+          </p>
+          <div className="h-56">
+            {totalRuns === 0 ? (
+              <EmptyPanel label="No automation runs yet — run one from the Automation Grid and it shows up here instantly." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={months}>
+                  <CartesianGrid stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
+                  <YAxis stroke="var(--muted-foreground)" fontSize={12} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    cursor={{ fill: "rgba(255,255,255,0.05)" }}
+                  />
+                  <Bar dataKey="success" name="Succeeded" stackId="runs" fill="var(--chart-1)" />
+                  <Bar
+                    dataKey="failed"
+                    name="Failed"
+                    stackId="runs"
+                    fill="var(--destructive)"
+                    radius={[6, 6, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </GlassCard>
+
+        <GlassCard hover={false} className="min-w-0">
+          <h2 className="text-base font-semibold">Most active automations</h2>
+          <p className="mb-4 text-xs text-muted-foreground">Share of runs · last 6 months</p>
+          {topAutomations.length === 0 ? (
+            <div className="h-56">
+              <EmptyPanel label="Nothing has run yet." />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {topAutomations.map((a) => (
+                <div key={a.id}>
+                  <WaterBar value={(a.runs / totalRuns) * 100} label={a.name} />
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {a.runs} {a.runs === 1 ? "run" : "runs"}
+                    {a.failed > 0 ? ` · ${a.failed} failed` : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </GlassCard>
+      </div>
+    </div>
+  );
+}
+
 function AnalyticsPage() {
-  const { series, deals, topCustomers, channelRevenue, funnel } = useAduf();
+  const { series, deals, topCustomers, channelRevenue, funnel, sources } = useAduf();
+  const connectedSources = sources.filter((s) => s.connected);
+  const noBusinessData =
+    series.length === 0 && deals.length === 0 && topCustomers.length === 0 && funnel.length === 0;
   const [spend, setSpend] = useState(50);
   const { rates } = useUsdRates();
   // All mock/business figures in this app are entered in Naira — this is
@@ -108,13 +219,27 @@ function AnalyticsPage() {
       <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:py-8">
         <PageHeader eyebrow="Analytics" title="Reports & Simulation" />
 
+        <LiveActivity />
+
+        {noBusinessData ? (
+          <GlassCard hover={false} className="mb-6 p-4 text-sm text-muted-foreground">
+            {connectedSources.length > 0
+              ? `${connectedSources.length} ${connectedSources.length === 1 ? "source is" : "sources are"} connected (${connectedSources
+                  .map((s) => s.name)
+                  .join(
+                    ", ",
+                  )}), but importing sales, leads and customers from them isn't built yet — so the panels below stay empty instead of showing made-up numbers.`
+              : "Connect a data source in Settings. Sales, leads and customer panels below fill in once that data is imported — until then they stay empty rather than showing made-up numbers."}
+          </GlassCard>
+        ) : null}
+
         <div className="grid gap-6 lg:grid-cols-2">
           <GlassCard hover={false} className="min-w-0">
             <h2 className="text-base font-semibold">Sales trend</h2>
             <p className="mb-4 text-xs text-muted-foreground">Last 6 months</p>
             <div className="h-64">
               {series.length === 0 ? (
-                <EmptyPanel label="No sales data yet — connect a source to see the trend." />
+                <EmptyPanel label="No sales data imported yet." />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={series}>
@@ -158,7 +283,7 @@ function AnalyticsPage() {
             <p className="mb-4 text-xs text-muted-foreground">Qualified only</p>
             <div className="h-64">
               {series.length === 0 ? (
-                <EmptyPanel label="No lead data yet — connect a source to see the trend." />
+                <EmptyPanel label="No lead data imported yet." />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={series}>
@@ -242,7 +367,7 @@ function AnalyticsPage() {
 
               <div className="h-72 min-w-0">
                 {series.length === 0 ? (
-                  <EmptyPanel label="Connect a data source to model projections against real history." />
+                  <EmptyPanel label="Needs imported sales history to model against." />
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={simulated}>
@@ -312,7 +437,7 @@ function AnalyticsPage() {
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {deals.length === 0 ? (
                   <div className="sm:col-span-2 xl:col-span-4">
-                    <EmptyPanel label="No deals yet — connect a CRM source to see your pipeline." />
+                    <EmptyPanel label="No deals imported yet." />
                   </div>
                 ) : (
                   stageOrder.map((stage, colIdx) => {
@@ -428,7 +553,7 @@ function AnalyticsPage() {
               <p className="mb-4 text-xs text-muted-foreground">Ranked by lifetime value</p>
               <div className="space-y-2.5">
                 {topCustomers.length === 0 ? (
-                  <EmptyPanel label="No customers yet — connect a commerce source to rank them here." />
+                  <EmptyPanel label="No customers imported yet." />
                 ) : (
                   topCustomers.map((c, i) => (
                     <motion.div

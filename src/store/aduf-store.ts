@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  AnalyticsSummary,
   Automation,
   ChannelId,
   ChatAttachment,
@@ -87,6 +88,13 @@ interface AdufState {
   memoryNodes: MemoryNode[];
   memoryEdges: MemoryEdge[];
   sources: DataSource[];
+  /** Which integrations have their OAuth app / key flow set up on the server. */
+  connectorsConfigured: Record<string, boolean>;
+  /** Whether connector status has been loaded from Supabase at least once, so
+   *  pages can tell "not connected" apart from "haven't checked yet". */
+  connectorsLoaded: boolean;
+  /** Live analytics computed from Supabase (null until first load). */
+  analytics: AnalyticsSummary | null;
   messages: ChatMessage[];
   thinking: boolean;
   sessionId: string;
@@ -147,8 +155,13 @@ interface AdufState {
   /** Replaces the Business Memory graph — used to hydrate from Supabase on
    *  load and to apply live updates from the realtime subscription. */
   setMemoryGraph: (nodes: MemoryNode[], edges: MemoryEdge[]) => void;
-  connectSource: (id: string) => void;
+  /** Applies the real connection state from Supabase to every data source.
+   *  Called by ConnectorsBootstrap, so every page agrees on what's connected. */
+  setConnectorStatuses: (
+    statuses: Record<string, { connected: boolean; configured: boolean }>,
+  ) => void;
   setSourceConnected: (id: string, connected: boolean) => void;
+  setAnalytics: (analytics: AnalyticsSummary) => void;
   sendMessage: (text: string, attachment?: ChatAttachment) => void;
   /** Replaces the whole messages list — used to hydrate a session's saved
    *  history from Supabase on load. */
@@ -214,6 +227,9 @@ export const useAduf = create<AdufState>((set, get) => ({
   memoryNodes: [],
   memoryEdges: [],
   sources: initialDataSources,
+  connectorsConfigured: {},
+  connectorsLoaded: false,
+  analytics: null,
   messages: [],
   thinking: false,
   sessionId: makeSessionId(),
@@ -461,17 +477,19 @@ export const useAduf = create<AdufState>((set, get) => ({
   },
   setMemoryGraph: (nodes, edges) => set({ memoryNodes: nodes, memoryEdges: edges }),
 
-  connectSource: (id) => {
-    set((s) => ({ sources: s.sources.map((d) => (d.id === id ? { ...d, connected: true } : d)) }));
-    const src = get().sources.find((x) => x.id === id);
-    if (!src) return;
-    void get().createInsight({
-      title: `${src.name} connected`,
-      body: `ADUF is now syncing data from ${src.name}.`,
-      severity: "success",
-      source: "Data",
-    });
-  },
+  setConnectorStatuses: (statuses) =>
+    set((s) => ({
+      connectorsLoaded: true,
+      connectorsConfigured: Object.fromEntries(
+        Object.entries(statuses).map(([id, v]) => [id, v.configured]),
+      ),
+      sources: s.sources.map((d) => {
+        const status = statuses[d.id];
+        return status ? { ...d, connected: status.connected } : d;
+      }),
+    })),
+
+  setAnalytics: (analytics) => set({ analytics }),
 
   setSourceConnected: (id, connected) =>
     set((s) => ({ sources: s.sources.map((d) => (d.id === id ? { ...d, connected } : d)) })),

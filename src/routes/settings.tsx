@@ -12,7 +12,7 @@ import { TelegramConnectionPanel } from "@/components/aduf/telegram-connection-p
 import { useAduf } from "@/store/aduf-store";
 import { useAuth } from "@/store/auth-store";
 import { OAUTH_CONNECTOR_IDS, isKeyConnector } from "@/lib/connector-catalog";
-import { checkIsAdminFn, fetchConnectorStatuses } from "@/lib/server-fns";
+import { checkIsAdminFn } from "@/lib/server-fns";
 
 /** Providers with a real OAuth redirect flow (see src/lib/server/oauth-providers.ts).
  *  Pasted-credential providers (Semrush, Jumia, Paystack) open a dialog instead,
@@ -56,12 +56,17 @@ const CONNECTOR_ERROR_COPY: Record<string, string> = {
 };
 
 function SettingsPage() {
-  const { sources, connectSource, setSourceConnected, userName, setUserName } = useAduf();
+  const {
+    sources,
+    connectorsConfigured: configured,
+    setSourceConnected,
+    userName,
+    setUserName,
+  } = useAduf();
   const { accessToken, status, signOut } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [pouring, setPouring] = useState<string | null>(null);
   const [keyDialog, setKeyDialog] = useState<string | null>(null);
-  const [configured, setConfigured] = useState<Record<string, boolean>>({});
   const [banner, setBanner] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
   // Only shows the Admin Panel link if this signed-in user is actually on
@@ -77,22 +82,6 @@ function SettingsPage() {
       .then((res) => setIsAdmin(res.isAdmin))
       .catch(() => setIsAdmin(false));
   }, [status, accessToken]);
-
-  // Pull real connection state + which providers have OAuth apps registered.
-  useEffect(() => {
-    fetchConnectorStatuses()
-      .then((statuses) => {
-        setConfigured(
-          Object.fromEntries(Object.entries(statuses).map(([id, s]) => [id, s.configured])),
-        );
-        for (const [id, status] of Object.entries(statuses)) {
-          setSourceConnected(id, status.connected);
-        }
-      })
-      .catch(() => {
-        // No backend yet — sources stay whatever the local mock state says.
-      });
-  }, [setSourceConnected]);
 
   // Surface the redirect back from /api/connectors/:provider/callback.
   useEffect(() => {
@@ -139,21 +128,22 @@ function SettingsPage() {
       return;
     }
     if (OAUTH_SOURCE_IDS.has(id) && configured[id]) {
+      let target = `/api/connectors/${id}/authorize`;
       if (id === "shopify") {
         const shop = window.prompt("Your Shopify store domain (e.g. my-store):");
         if (!shop) return;
-        window.location.href = `/api/connectors/shopify/authorize?shop=${encodeURIComponent(shop)}`;
-        return;
+        target = `/api/connectors/shopify/authorize?shop=${encodeURIComponent(shop)}`;
       }
-      window.location.href = `/api/connectors/${id}/authorize`;
+      // Play the water-pouring animation, then hand off to the provider.
+      setPouring(id);
+      setTimeout(() => {
+        window.location.href = target;
+      }, 700);
       return;
     }
-    // OAuth app credentials not set yet: keep the local demo connect (see .env.example).
-    setPouring(id);
-    setTimeout(() => {
-      connectSource(id);
-      setPouring(null);
-    }, 1200);
+    // No OAuth app registered for this provider yet. Don't fake a connection —
+    // it would never reach Supabase and every other page would disagree.
+    setBanner({ kind: "error", text: CONNECTOR_ERROR_COPY["not_configured"]! });
   };
 
   const disconnect = async (id: string) => {

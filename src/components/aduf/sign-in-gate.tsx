@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   MessageCircle,
   Network,
-  Sparkles,
   Target,
   Waves,
 } from "lucide-react";
@@ -17,6 +16,7 @@ import { AnimatedAnalyticsReplay } from "./animated-analytics-replay";
 import auroraBg from "@/assets/aurora-bg.jpg";
 import automationCore from "@/assets/automation-core.png";
 import automationLiveFeed from "@/assets/automation-live-feed.webp";
+import { BrandLogo } from "./brand-logo";
 
 const fadeUp = {
   initial: { opacity: 0, y: 16 },
@@ -119,12 +119,7 @@ export function SignInGate({ loading }: { loading: boolean }) {
       {/* Top bar */}
       <header className="mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-5 sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
-          <div
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-xl"
-            style={{ background: "var(--gradient-accent)" }}
-          >
-            <Sparkles className="h-4 w-4 text-background" />
-          </div>
+          <BrandLogo className="h-8 w-8" />
           <p className="truncate font-display text-sm font-semibold">ADUF AI</p>
         </div>
         <button
