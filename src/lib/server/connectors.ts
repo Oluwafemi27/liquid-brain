@@ -14,7 +14,7 @@ export interface ConnectorStatus {
  *  (if a backend is configured) with which providers have OAuth app
  *  credentials set at all. Never throws — callers always get a full map. */
 export async function getConnectorStatuses(): Promise<Record<string, ConnectorStatus>> {
-  const ids = ["shopify", "ga", "whatsapp", "paystack", "meta", "sheets"];
+  const ids = ["shopify", "ga", "telegram", "paystack", "meta", "sheets"];
   const base: Record<string, ConnectorStatus> = {};
   for (const id of ids) {
     const provider = getProvider(id);

@@ -74,18 +74,15 @@ export const OAUTH_PROVIDERS: Record<string, ProviderConfig> = {
     clientId: process.env["META_CLIENT_ID"],
     clientSecret: process.env["META_CLIENT_SECRET"],
   },
-  whatsapp: {
-    id: "whatsapp",
-    displayName: "WhatsApp Business",
-    authorizeUrl: "https://www.facebook.com/v21.0/dialog/oauth",
-    tokenUrl: "https://graph.facebook.com/v21.0/oauth/access_token",
-    scope: "whatsapp_business_management,whatsapp_business_messaging",
-    clientId: process.env["META_CLIENT_ID"],
-    clientSecret: process.env["META_CLIENT_SECRET"],
-  },
   paystack: {
     id: "paystack",
     displayName: "Paystack",
+    keyBased: true,
+  },
+  // Bot token from @BotFather, pasted in Settings — see src/lib/server/telegram.ts.
+  telegram: {
+    id: "telegram",
+    displayName: "Telegram",
     keyBased: true,
   },
 };

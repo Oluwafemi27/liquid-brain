@@ -24,6 +24,7 @@ import { Route as ApiFxRouteImport } from './routes/api/fx'
 import { Route as ApiModelKeysRouteImport } from './routes/api/model-keys'
 import { Route as ApiN8nConnectionRouteImport } from './routes/api/n8n-connection'
 import { Route as ApiSkillsRouteImport } from './routes/api/skills'
+import { Route as ApiConnectorsTelegramRouteImport } from './routes/api/connectors/telegram'
 import { Route as ApiDocumentsConvertRouteImport } from './routes/api/documents/convert'
 import { Route as ApiDocumentsUploadRouteImport } from './routes/api/documents/upload'
 import { Route as ApiSandboxRunRouteImport } from './routes/api/sandbox/run'
@@ -31,6 +32,7 @@ import { Route as ApiSkillsReplyRouteImport } from './routes/api/skills/reply'
 import { Route as ApiTasksRunRouteImport } from './routes/api/tasks/run'
 import { Route as ApiConnectorsProviderAuthorizeRouteImport } from './routes/api/connectors/$provider/authorize'
 import { Route as ApiConnectorsProviderCallbackRouteImport } from './routes/api/connectors/$provider/callback'
+import { Route as ApiConnectorsTelegramWebhookRouteImport } from './routes/api/connectors/telegram/webhook'
 import { Route as ApiDocumentsIdDownloadRouteImport } from './routes/api/documents/$id/download'
 import { Route as ApiDocumentsIdPreviewRouteImport } from './routes/api/documents/$id/preview'
 
@@ -109,6 +111,11 @@ const ApiSkillsRoute = ApiSkillsRouteImport.update({
   path: '/api/skills',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiConnectorsTelegramRoute = ApiConnectorsTelegramRouteImport.update({
+  id: '/api/connectors/telegram',
+  path: '/api/connectors/telegram',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDocumentsConvertRoute = ApiDocumentsConvertRouteImport.update({
   id: '/convert',
   path: '/convert',
@@ -146,6 +153,12 @@ const ApiConnectorsProviderCallbackRoute =
     path: '/api/connectors/$provider/callback',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiConnectorsTelegramWebhookRoute =
+  ApiConnectorsTelegramWebhookRouteImport.update({
+    id: '/webhook',
+    path: '/webhook',
+    getParentRoute: () => ApiConnectorsTelegramRoute,
+  } as any)
 const ApiDocumentsIdDownloadRoute = ApiDocumentsIdDownloadRouteImport.update({
   id: '/$id/download',
   path: '/$id/download',
@@ -173,6 +186,7 @@ export interface FileRoutesByFullPath {
   '/api/model-keys': typeof ApiModelKeysRoute
   '/api/n8n-connection': typeof ApiN8nConnectionRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
+  '/api/connectors/telegram': typeof ApiConnectorsTelegramRouteWithChildren
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/upload': typeof ApiDocumentsUploadRoute
   '/api/sandbox/run': typeof ApiSandboxRunRoute
@@ -180,6 +194,7 @@ export interface FileRoutesByFullPath {
   '/api/tasks/run': typeof ApiTasksRunRoute
   '/api/connectors/$provider/authorize': typeof ApiConnectorsProviderAuthorizeRoute
   '/api/connectors/$provider/callback': typeof ApiConnectorsProviderCallbackRoute
+  '/api/connectors/telegram/webhook': typeof ApiConnectorsTelegramWebhookRoute
   '/api/documents/$id/download': typeof ApiDocumentsIdDownloadRoute
   '/api/documents/$id/preview': typeof ApiDocumentsIdPreviewRoute
 }
@@ -199,6 +214,7 @@ export interface FileRoutesByTo {
   '/api/model-keys': typeof ApiModelKeysRoute
   '/api/n8n-connection': typeof ApiN8nConnectionRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
+  '/api/connectors/telegram': typeof ApiConnectorsTelegramRouteWithChildren
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/upload': typeof ApiDocumentsUploadRoute
   '/api/sandbox/run': typeof ApiSandboxRunRoute
@@ -206,6 +222,7 @@ export interface FileRoutesByTo {
   '/api/tasks/run': typeof ApiTasksRunRoute
   '/api/connectors/$provider/authorize': typeof ApiConnectorsProviderAuthorizeRoute
   '/api/connectors/$provider/callback': typeof ApiConnectorsProviderCallbackRoute
+  '/api/connectors/telegram/webhook': typeof ApiConnectorsTelegramWebhookRoute
   '/api/documents/$id/download': typeof ApiDocumentsIdDownloadRoute
   '/api/documents/$id/preview': typeof ApiDocumentsIdPreviewRoute
 }
@@ -226,6 +243,7 @@ export interface FileRoutesById {
   '/api/model-keys': typeof ApiModelKeysRoute
   '/api/n8n-connection': typeof ApiN8nConnectionRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
+  '/api/connectors/telegram': typeof ApiConnectorsTelegramRouteWithChildren
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/upload': typeof ApiDocumentsUploadRoute
   '/api/sandbox/run': typeof ApiSandboxRunRoute
@@ -233,6 +251,7 @@ export interface FileRoutesById {
   '/api/tasks/run': typeof ApiTasksRunRoute
   '/api/connectors/$provider/authorize': typeof ApiConnectorsProviderAuthorizeRoute
   '/api/connectors/$provider/callback': typeof ApiConnectorsProviderCallbackRoute
+  '/api/connectors/telegram/webhook': typeof ApiConnectorsTelegramWebhookRoute
   '/api/documents/$id/download': typeof ApiDocumentsIdDownloadRoute
   '/api/documents/$id/preview': typeof ApiDocumentsIdPreviewRoute
 }
@@ -254,6 +273,7 @@ export interface FileRouteTypes {
     | '/api/model-keys'
     | '/api/n8n-connection'
     | '/api/skills'
+    | '/api/connectors/telegram'
     | '/api/documents/convert'
     | '/api/documents/upload'
     | '/api/sandbox/run'
@@ -261,6 +281,7 @@ export interface FileRouteTypes {
     | '/api/tasks/run'
     | '/api/connectors/$provider/authorize'
     | '/api/connectors/$provider/callback'
+    | '/api/connectors/telegram/webhook'
     | '/api/documents/$id/download'
     | '/api/documents/$id/preview'
   fileRoutesByTo: FileRoutesByTo
@@ -280,6 +301,7 @@ export interface FileRouteTypes {
     | '/api/model-keys'
     | '/api/n8n-connection'
     | '/api/skills'
+    | '/api/connectors/telegram'
     | '/api/documents/convert'
     | '/api/documents/upload'
     | '/api/sandbox/run'
@@ -287,6 +309,7 @@ export interface FileRouteTypes {
     | '/api/tasks/run'
     | '/api/connectors/$provider/authorize'
     | '/api/connectors/$provider/callback'
+    | '/api/connectors/telegram/webhook'
     | '/api/documents/$id/download'
     | '/api/documents/$id/preview'
   id:
@@ -306,6 +329,7 @@ export interface FileRouteTypes {
     | '/api/model-keys'
     | '/api/n8n-connection'
     | '/api/skills'
+    | '/api/connectors/telegram'
     | '/api/documents/convert'
     | '/api/documents/upload'
     | '/api/sandbox/run'
@@ -313,6 +337,7 @@ export interface FileRouteTypes {
     | '/api/tasks/run'
     | '/api/connectors/$provider/authorize'
     | '/api/connectors/$provider/callback'
+    | '/api/connectors/telegram/webhook'
     | '/api/documents/$id/download'
     | '/api/documents/$id/preview'
   fileRoutesById: FileRoutesById
@@ -333,6 +358,7 @@ export interface RootRouteChildren {
   ApiModelKeysRoute: typeof ApiModelKeysRoute
   ApiN8nConnectionRoute: typeof ApiN8nConnectionRoute
   ApiSkillsRoute: typeof ApiSkillsRouteWithChildren
+  ApiConnectorsTelegramRoute: typeof ApiConnectorsTelegramRouteWithChildren
   ApiSandboxRunRoute: typeof ApiSandboxRunRoute
   ApiTasksRunRoute: typeof ApiTasksRunRoute
   ApiConnectorsProviderAuthorizeRoute: typeof ApiConnectorsProviderAuthorizeRoute
@@ -446,6 +472,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSkillsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/connectors/telegram': {
+      id: '/api/connectors/telegram'
+      path: '/api/connectors/telegram'
+      fullPath: '/api/connectors/telegram'
+      preLoaderRoute: typeof ApiConnectorsTelegramRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/documents/convert': {
       id: '/api/documents/convert'
       path: '/convert'
@@ -495,6 +528,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiConnectorsProviderCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/connectors/telegram/webhook': {
+      id: '/api/connectors/telegram/webhook'
+      path: '/webhook'
+      fullPath: '/api/connectors/telegram/webhook'
+      preLoaderRoute: typeof ApiConnectorsTelegramWebhookRouteImport
+      parentRoute: typeof ApiConnectorsTelegramRoute
+    }
     '/api/documents/$id/download': {
       id: '/api/documents/$id/download'
       path: '/$id/download'
@@ -542,6 +582,19 @@ const ApiSkillsRouteWithChildren = ApiSkillsRoute._addFileChildren(
   ApiSkillsRouteChildren,
 )
 
+interface ApiConnectorsTelegramRouteChildren {
+  ApiConnectorsTelegramWebhookRoute: typeof ApiConnectorsTelegramWebhookRoute
+}
+
+const ApiConnectorsTelegramRouteChildren: ApiConnectorsTelegramRouteChildren = {
+  ApiConnectorsTelegramWebhookRoute: ApiConnectorsTelegramWebhookRoute,
+}
+
+const ApiConnectorsTelegramRouteWithChildren =
+  ApiConnectorsTelegramRoute._addFileChildren(
+    ApiConnectorsTelegramRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
@@ -558,6 +611,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiModelKeysRoute: ApiModelKeysRoute,
   ApiN8nConnectionRoute: ApiN8nConnectionRoute,
   ApiSkillsRoute: ApiSkillsRouteWithChildren,
+  ApiConnectorsTelegramRoute: ApiConnectorsTelegramRouteWithChildren,
   ApiSandboxRunRoute: ApiSandboxRunRoute,
   ApiTasksRunRoute: ApiTasksRunRoute,
   ApiConnectorsProviderAuthorizeRoute: ApiConnectorsProviderAuthorizeRoute,
