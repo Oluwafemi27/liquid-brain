@@ -182,11 +182,39 @@ export interface ProposedDeployN8nWorkflowAction {
   reasoning: string;
 }
 
-export type ProposedAction =
+/** A reminder on the Schedule page — low-risk and internal, so it runs
+ *  immediately (and can be undone) instead of waiting for approval. */
+export interface ProposedReminderAction {
+  type: "create_reminder";
+  title: string;
+  day: Weekday;
+  startTime: string; // "HH:MM"
+  endTime: string; // "HH:MM"
+  reasoning: string;
+}
+
+/** A change to an ad budget. ADUF has read-only access to ad accounts, so
+ *  approving records the decision (and checks it against the owner's cap) —
+ *  the owner makes the change in their ad platform. */
+export interface ProposedAdBudgetAction {
+  type: "change_ad_budget";
+  platform: string;
+  /** Daily budget change in USD (positive = increase). */
+  changeUsdPerDay: number;
+  reasoning: string;
+}
+
+export type ProposedAction = (
   | ProposedGoalAction
   | ProposedAutomationAction
   | ProposedCreateAutomationAction
-  | ProposedDeployN8nWorkflowAction;
+  | ProposedDeployN8nWorkflowAction
+  | ProposedReminderAction
+  | ProposedAdBudgetAction
+) & {
+  /** Set by the server once the proposal is recorded in the action ledger. */
+  actionId?: string | undefined;
+};
 
 export type N8nDeploymentStatus = "draft" | "inactive" | "active" | "error" | "archived";
 
@@ -229,6 +257,10 @@ export interface ChatMessage {
    *  explicit approval before it takes effect anywhere. */
   proposedAction?: ProposedAction | undefined;
   proposedActionStatus?: ProposedActionStatus;
+  /** The data this answer was based on, with freshness. Empty = ADUF used no stored data. */
+  sources?: SourceRef[] | undefined;
+  /** Data ADUF knows it is missing or that is out of date (shown so it never guesses silently). */
+  dataGaps?: string[] | undefined;
 }
 
 export type AdufSeverity = "low" | "medium" | "high" | "critical";
@@ -322,4 +354,217 @@ export interface ScheduleEvent {
   category: ScheduleCategory;
   notes: string;
   done: boolean;
+}
+
+/** One month of real automation activity, from the `automation_runs` table. */
+export interface ActivityMonth {
+  month: string;
+  runs: number;
+  success: number;
+  failed: number;
+}
+
+export interface AutomationActivity {
+  id: string;
+  name: string;
+  runs: number;
+  failed: number;
+}
+
+/** Live analytics computed server-side from rows ADUF actually recorded for
+ *  this user — never from simulated or placeholder numbers. */
+export interface AnalyticsSummary {
+  months: ActivityMonth[];
+  totalRuns: number;
+  successRate: number | null; // 0-100, null when there are no runs yet
+  topAutomations: AutomationActivity[];
+  goals: { total: number; completed: number; avgProgress: number };
+  generatedAt: string;
+}
+
+// ---- Business data import (sales / leads / customers / deals / traffic) ----
+
+export type ImportSource = "csv" | "sheets" | "drive" | "ga" | "gmail";
+export type ImportRecordKind = "sale" | "lead" | "customer" | "deal" | "traffic";
+
+/** One completed import, as listed under "Imported data" on Analytics. */
+export interface ImportSummary {
+  id: string;
+  source: ImportSource;
+  kind: ImportRecordKind;
+  label: string;
+  currency: string;
+  rowsImported: number;
+  rowsSkipped: number;
+  note: string;
+  createdAt: string;
+  /** Last time this was (re)fetched from its source. */
+  syncedAt: string;
+  /** Why the last automatic sync failed, if it did. */
+  lastError: string | null;
+  /** True when ADUF can refresh it from the source (everything except file uploads). */
+  canSync: boolean;
+}
+
+/** Everything the Analytics business panels render, computed server-side
+ *  from imported rows (see lib/server/business-data.ts). Money is in USD. */
+export interface BusinessData {
+  series: SeriesPoint[];
+  deals: CrmDeal[];
+  /** Deals beyond the 200 returned (so the board can say "+N more"). */
+  dealsTotal: number;
+  topCustomers: TopCustomer[];
+  channelRevenue: ChannelRevenue[];
+  /** "Last 30 days" or the wider window used when the last 30 days were empty. */
+  channelPeriod: string;
+  funnel: FunnelStage[];
+  /** Where the sales / leads series came from, so the UI can say so honestly. */
+  salesFrom: "records" | "ga" | null;
+  leadsFrom: "records" | "ga" | null;
+  /** True when data was imported but none of it falls in the last 6 months. */
+  outsideWindow: boolean;
+  counts: { sales: number; leads: number; customers: number; deals: number; trafficMonths: number };
+  imports: ImportSummary[];
+  generatedAt: string;
+}
+
+// ---- Trust layer: verdict, approvals, activity, connection health --------
+
+export type VerdictStatus = "green" | "amber" | "red" | "unknown";
+export type Confidence = "high" | "medium" | "low";
+export type SourceState = "fresh" | "stale" | "missing";
+
+/** The exact data behind a statement. `state` is how much to trust it. */
+export interface SourceRef {
+  label: string;
+  /** In-app page where the underlying numbers can be seen. */
+  href: string;
+  /** When that data was last updated (null = never / unknown). */
+  asOf: string | null;
+  state: SourceState;
+  note?: string | undefined;
+}
+
+export interface VerdictItem {
+  id: string;
+  level: "ok" | "watch" | "act";
+  text: string;
+  /** One line: why this matters, in plain words. */
+  why: string;
+  suggestion?: string | undefined;
+  confidence: Confidence;
+  sources: SourceRef[];
+  href?: string | undefined;
+}
+
+export interface DailyVerdict {
+  status: VerdictStatus;
+  headline: string;
+  subline: string;
+  items: VerdictItem[];
+  pendingApprovals: number;
+  confidence: Confidence;
+  confidenceNote: string;
+  generatedAt: string;
+  /** False when there's nothing to judge yet (no data, goals or automations). */
+  hasData: boolean;
+}
+
+export type ActionTier = "auto" | "approve";
+export type ActionRisk = "internal" | "ads" | "messages" | "money" | "external";
+export type ActionStatus =
+  "proposed" | "auto_executed" | "approved" | "declined" | "undone" | "expired" | "failed";
+
+export interface ActionPreview {
+  /** "If you approve: …" */
+  headline: string;
+  effects: string[];
+  unchanged: string[];
+  estimate?: { label: string; value: string }[] | undefined;
+  confidence: Confidence;
+  confidenceNote: string;
+  sources: SourceRef[];
+  limit?: { exceeded: boolean; note: string } | undefined;
+}
+
+export interface ActionRecord {
+  id: string;
+  type: string;
+  title: string;
+  reasoning: string;
+  tier: ActionTier;
+  risk: ActionRisk;
+  status: ActionStatus;
+  source: string;
+  preview: ActionPreview | null;
+  result: { note?: string; manual?: boolean } | null;
+  overLimit: boolean;
+  decidedBy: "auto" | "owner" | null;
+  error: string | null;
+  undoUntil: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+  undoneAt: string | null;
+}
+
+export interface ActivityItem {
+  id: string;
+  at: string;
+  /** Platform id (ga, sheets, gmail, shopify…), "csv" for uploads, "aduf" for ADUF itself. */
+  platform: string;
+  kind: "action" | "import" | "sync" | "health" | "connect" | "alert" | "message" | "system";
+  title: string;
+  detail: string;
+  status: "ok" | "warn" | "error" | "info";
+  /** Present for ADUF actions: who decided and whether it can still be undone. */
+  action?: {
+    id: string;
+    status: ActionStatus;
+    tier: ActionTier;
+    decidedBy: "auto" | "owner" | null;
+    undoUntil: string | null;
+    canUndo: boolean;
+  };
+}
+
+export type HealthState = "live" | "delayed" | "broken" | "off";
+
+export interface ConnectionHealth {
+  id: string;
+  name: string;
+  state: HealthState;
+  message: string;
+  actionLabel?: string | undefined;
+  actionHref?: string | undefined;
+  /** "live-check" = we called the provider just now; "token-only" = we only inspected the saved login. */
+  method: "live-check" | "token-only";
+  checkedAt: string | null;
+  lastOkAt: string | null;
+}
+
+export interface OwnerSettings {
+  adChangeCapUsd: number;
+  dailyMessageCap: number;
+  alertsEnabled: boolean;
+  salesDropPct: number;
+  failedRunsThreshold: number;
+  quietStart: string; // "HH:MM"
+  quietEnd: string;
+  timezone: string;
+  digestEnabled: boolean;
+  digestChannel: "email" | "telegram";
+}
+
+export interface PlatformAnalytics {
+  id: string;
+  name: string;
+  health: ConnectionHealth | null;
+  hasData: boolean;
+  lastSyncAt: string | null;
+  kpis: { label: string; value: string; hint?: string }[];
+  months: { month: string; a: number; b?: number }[];
+  seriesLabels: { a: string; b?: string };
+  breakdown: { name: string; value: number }[];
+  breakdownLabel: string;
+  note?: string | undefined;
 }

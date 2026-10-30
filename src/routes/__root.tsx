@@ -77,6 +77,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "theme-color", content: "#0A0E1A" },
       { title: "ADUF AI — The Business Brain for SMBs" },
       {
         name: "description",
@@ -90,11 +91,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
+    // Returning users have a saved login: hide the marketing page (CSS only, so crawlers and
+    // first-time visitors — who have none — still get the full page in the HTML) until the
+    // session check finishes. A 4s failsafe means it can never leave a blank screen.
+    scripts: [
+      {
+        children:
+          "try{var k=Object.keys(localStorage).some(function(x){return /^sb-.*-auth-token$/.test(x)});if(k){document.documentElement.setAttribute('data-session','maybe');setTimeout(function(){document.documentElement.removeAttribute('data-session')},4000)}}catch(e){}",
+      },
+    ],
+    styles: [{ children: 'html[data-session="maybe"] [data-landing]{visibility:hidden}' }],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
       },
+      { rel: "icon", href: "/favicon.ico", sizes: "any" },
+      { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32.png" },
+      { rel: "icon", type: "image/png", sizes: "16x16", href: "/favicon-16.png" },
+      { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
     ],
   }),
   shellComponent: RootShell,

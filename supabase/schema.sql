@@ -683,3 +683,7 @@ alter publication supabase_realtime add table schedule_events;
 
 -- === Migration 014: Telegram connector ===
 -- See supabase/migrations/014_telegram_connector.sql (bot token in Vault, RLS on, service-role only).
+
+-- === Migration 017: business data import ===
+-- See supabase/migrations/017_business_data_import.sql (data_imports, business_records,
+-- traffic_snapshots — RLS on, no policies: service-role only, customer data is private).

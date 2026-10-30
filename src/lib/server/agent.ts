@@ -67,6 +67,20 @@ const proposedActionSchema = z.discriminatedUnion("type", [
     reasoning: z.string().min(1).max(400),
   }),
   z.object({
+    type: z.literal("create_reminder"),
+    title: z.string().min(1).max(120),
+    day: z.enum(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]),
+    startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    reasoning: z.string().min(1).max(400),
+  }),
+  z.object({
+    type: z.literal("change_ad_budget"),
+    platform: z.string().min(1).max(40),
+    changeUsdPerDay: z.number().min(-100000).max(100000),
+    reasoning: z.string().min(1).max(400),
+  }),
+  z.object({
     type: z.literal("deploy_n8n_workflow"),
     name: z.string().min(1).max(120),
     templateId: z.string().uuid().optional(),
@@ -219,16 +233,26 @@ document/report). Put the real, complete content in it, not a summary of
 what it would contain. Only do this when a file is actually the right
 deliverable — most replies still need no document.
 
+=== Honesty and sources (always) ===
+A "Facts you can rely on" sheet follows, numbered [S1], [S2]… It is the ONLY
+stored data you know about. Rules: (1) state numbers about the owner's
+business ONLY if they appear in the sheet, and cite the source inline as
+[S#]; (2) if the sheet says NO DATA or the data is old, say so plainly and
+say what to connect or import — never estimate it; (3) label anything you
+infer as an estimate ("roughly", "my guess") and never present it as fact;
+(4) explain any metric in a few plain words, no jargon.
+
 === Acting on other pages: proposedAction ===
 You are not limited to talking — when a reply calls for an actual change to
 the Goals page or the Automation Grid, attach "proposedAction" with the
-specific change. The owner always sees it as an Approve/Dismiss card first;
-nothing is created or toggled anywhere until they tap Approve, so propose
-freely whenever it's the right next step, but only when you actually have
+specific change. Approval rules are enforced by the server, not by you: a
+create_reminder (low-risk, internal) runs immediately and can be undone for
+24h; everything else shows the owner an Approve/Decline card with a preview
+and nothing happens until they tap Approve, so propose freely whenever it's the right next step, but only when you actually have
 what a real goal or automation needs (a concrete title and target; a
 specific channel and on/off state) — if you don't, ask a "question" instead
 and propose once you know. Never set "question" and "proposedAction" on the
-same reply. Three shapes exist today:
+same reply. Shapes that exist today (two more — create_reminder and change_ad_budget — are in the JSON shape below; a change_ad_budget only RECORDS the owner's decision, you cannot change ad accounts, and changeUsdPerDay is in USD):
 - {"type": "create_goal", "title": string, "target": number, "currency": string, "reasoning": string} —
   currency is "₦" (or another symbol) for money goals, "" for a plain count
   (bookings, signups, etc). "reasoning" is one short sentence the owner
@@ -276,6 +300,18 @@ never build a table wider than 4 columns. Close with at most one follow-up
 question. Skip the table entirely for a reply that's simple prose with
 nothing structured in it — don't force data into a table that doesn't have
 any.
+
+Table syntax is STRICT — since "reply" is a JSON string, every line break
+inside a table must be a literal "\n" escape, not a real newline, and the
+table is invalid without ALL THREE of these on their own "\n"-separated
+line: (1) the header row, (2) a delimiter row of the same column count
+using only dashes ("---"), (3) each data row. Never put more than one row
+on the same line. A 3-column example, exactly as it must appear inside
+the JSON string (note every row boundary is "\n", not a space):
+"Here's the breakdown:\n\n| Step | Action | Metric |\n| --- | --- | --- |\n| 1 | Post 3 reels/week | Profile visitors |\n| 2 | Pin a discount-code post | Leads captured |\n| 3 | Reply to DMs within 24h | Sales conversion |"
+If you can't confidently produce that exact shape, write the same content
+as a short bulleted list instead — never a table missing the delimiter
+row or with rows run together on one line.
 
 === Tool execution: toolCall ===
 When actually getting the answer right requires running code — a real
@@ -353,6 +389,7 @@ export async function callAgent(
   userText: string,
   repairContext?: string,
   surveyContext?: string,
+  factsSheet?: string,
 ): Promise<AgentReply & { toolTrace: AgentTraceStep[] }> {
   const key = await resolveDefaultModelKey();
   if (!key) throw new NoModelConfiguredError();
@@ -367,6 +404,7 @@ export async function callAgent(
       ? `\n\n=== Owner's setup profile (from their onboarding survey) ===\n${surveyContext}\nUse this as background context for every reply — don't re-ask for it, but do ask follow-up questions to fill in whatever it doesn't cover and your diagnosis needs.`
       : "\n\nThis owner hasn't completed their setup survey yet, so you have no business profile for them — ask what you need to know as you go.") +
     buildSkillsBlock(skills) +
+    (factsSheet ? `\n\n=== Facts you can rely on (today) ===\n${factsSheet}` : "") +
     (repairContext
       ? `\n\nYour previous reply was rejected: ${repairContext}\nReply again, following the JSON shape exactly.`
       : "");
@@ -438,7 +476,7 @@ export async function callAgent(
                   correction: m.correction, // null unless starred+open — see instructions
                 })),
               )
-            : "No templates matched. Fall back to a \"buildBrief\" in deploy_n8n_workflow instead.") +
+            : 'No templates matched. Fall back to a "buildBrief" in deploy_n8n_workflow instead.') +
           `\n\nUse the best match's exact "id" as templateId if proposing deploy_n8n_workflow. ` +
           `If every close match has a "correction" with correctedJson still null (unfixed), do ` +
           `not use it — pick another or build fresh. Give your final "reply" now unless another ` +

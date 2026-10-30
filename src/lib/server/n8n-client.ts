@@ -32,7 +32,9 @@ async function n8nRequest<T>(path: string, opts: N8nRequestOptions = {}): Promis
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`n8n API ${opts.method ?? "GET"} ${path} failed (${res.status}): ${text.slice(0, 300)}`);
+    throw new Error(
+      `n8n API ${opts.method ?? "GET"} ${path} failed (${res.status}): ${text.slice(0, 300)}`,
+    );
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -69,11 +71,18 @@ export async function deployN8nWorkflow(
   workflowJson: Record<string, unknown>,
   name: string,
 ): Promise<N8nWorkflowSummary> {
-  const created = await n8nRequest<{ id: string; name: string; active: boolean; updatedAt: string }>(
-    "/workflows",
-    { method: "POST", body: toSafeModePayload(workflowJson, name) },
-  );
-  return { id: created.id, name: created.name, active: created.active, updatedAt: created.updatedAt };
+  const created = await n8nRequest<{
+    id: string;
+    name: string;
+    active: boolean;
+    updatedAt: string;
+  }>("/workflows", { method: "POST", body: toSafeModePayload(workflowJson, name) });
+  return {
+    id: created.id,
+    name: created.name,
+    active: created.active,
+    updatedAt: created.updatedAt,
+  };
 }
 
 export async function activateN8nWorkflow(n8nWorkflowId: string): Promise<void> {

@@ -23,33 +23,32 @@ const GROUPS: GroupSpec[] = [
 ];
 
 /** Builds the Business Memory knowledge graph entirely from real counts
- *  already recorded in Supabase for this workspace. The core "ADUF" node
+ *  already recorded in Supabase for this user. (Uploaded documents are the
+ *  one exception: `agent_documents` has no user_id column yet, so that
+ *  cluster is workspace-wide.) The core "ADUF" node
  *  always exists (facts = 0 on a brand-new workspace); satellite clusters
  *  only appear once ADUF has actually learned something in that category,
  *  so the graph never shows fabricated or placeholder data. */
-export async function getMemoryGraph(): Promise<{ nodes: MemoryNode[]; edges: MemoryEdge[] }> {
+export async function getMemoryGraph(
+  userId: string,
+): Promise<{ nodes: MemoryNode[]; edges: MemoryEdge[] }> {
   const db = getSupabaseAdmin();
   const core: MemoryNode = { id: "core", label: "ADUF", group: "core", facts: 0, x: 50, y: 50 };
   if (!db) return { nodes: [core], edges: [] };
 
   const [chatMessages, documents, goals, automationRuns] = await Promise.all([
-    db
-      .from("chat_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("workspace_id", DEFAULT_WORKSPACE_ID),
+    db.from("chat_messages").select("id", { count: "exact", head: true }).eq("user_id", userId),
     db
       .from("agent_documents")
       .select("id", { count: "exact", head: true })
       .eq("workspace_id", DEFAULT_WORKSPACE_ID),
-    db
-      .from("goals")
-      .select("id", { count: "exact", head: true })
-      .eq("workspace_id", DEFAULT_WORKSPACE_ID),
-    db
-      .from("automation_runs")
-      .select("id", { count: "exact", head: true })
-      .eq("workspace_id", DEFAULT_WORKSPACE_ID),
+    db.from("goals").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    db.from("automation_runs").select("id", { count: "exact", head: true }).eq("user_id", userId),
   ]);
+
+  for (const [name, res] of Object.entries({ chatMessages, documents, goals, automationRuns })) {
+    if (res.error) console.error(`[memory] failed to count ${name}`, res.error);
+  }
 
   const counts: Record<string, number> = {
     customers: chatMessages.count ?? 0,

@@ -17,7 +17,8 @@ export async function buildWorkflowFromBrief(
   name: string,
 ): Promise<Record<string, unknown>> {
   const key = await resolveDefaultModelKey();
-  if (!key) throw new Error("No AI model connected — add one in Settings before building a workflow.");
+  if (!key)
+    throw new Error("No AI model connected — add one in Settings before building a workflow.");
   const provider = MODEL_PROVIDERS[key.providerId];
   if (!provider) throw new Error(`Unknown model provider "${key.providerId}"`);
 
@@ -36,9 +37,7 @@ export async function buildWorkflowFromBrief(
         .join("\n\n")
     : "No close reference workflow found — build from n8n platform conventions directly.";
 
-  const docsBlock = docs.length
-    ? docs.map((d) => `### ${d.title}\n${d.content}`).join("\n\n")
-    : "";
+  const docsBlock = docs.length ? docs.map((d) => `### ${d.title}\n${d.content}`).join("\n\n") : "";
 
   const system =
     `You are an n8n workflow engineer. Output ONLY a single valid n8n workflow JSON object ` +
@@ -101,7 +100,7 @@ function parseWorkflowJson(text: string): Record<string, unknown> {
     parsed === null ||
     !Array.isArray((parsed as Record<string, unknown>)["nodes"])
   ) {
-    throw new Error("Generated workflow was missing a valid \"nodes\" array.");
+    throw new Error('Generated workflow was missing a valid "nodes" array.');
   }
   return parsed as Record<string, unknown>;
 }

@@ -36,7 +36,8 @@ export async function searchN8nSkillDocs(query: string, limit = 4): Promise<N8nS
   // n8n_workflow_templates.search_doc.
   const scored = data
     .map((row) => {
-      const haystack = `${row["title"]} ${row["content"]} ${(row["tags"] as string[]).join(" ")}`.toLowerCase();
+      const haystack =
+        `${row["title"]} ${row["content"]} ${(row["tags"] as string[]).join(" ")}`.toLowerCase();
       const score = words.reduce((acc, w) => acc + (haystack.includes(w) ? 1 : 0), 0);
       return { row, score };
     })

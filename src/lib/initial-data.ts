@@ -13,6 +13,15 @@ export const initialDataSources: DataSource[] = [
   { id: "paystack", name: "Paystack", category: "Payments", connected: false },
   { id: "meta", name: "Meta Ads", category: "Advertising", connected: false },
   { id: "sheets", name: "Google Sheets", category: "Ops", connected: false },
+  { id: "drive", name: "Google Drive", category: "Files", connected: false },
+  { id: "gmail", name: "Gmail", category: "Email", connected: false },
+  { id: "instagram", name: "Instagram", category: "Social", connected: false },
+  { id: "tiktok", name: "TikTok", category: "Social", connected: false },
+  { id: "discord", name: "Discord", category: "Messaging", connected: false },
+  { id: "jumia", name: "Jumia", category: "Marketplace", connected: false },
+  { id: "aliexpress", name: "AliExpress", category: "Marketplace", connected: false },
+  { id: "alibaba", name: "Alibaba", category: "Sourcing", connected: false },
+  { id: "semrush", name: "Semrush", category: "SEO", connected: false },
 ];
 
 /** Fresh accounts start with an empty week — no fabricated meetings. */

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
+import { normalizeShop } from "@/lib/server/oauth-exchange";
 import { getProvider, isOAuth } from "@/lib/server/oauth-providers";
 import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "@/lib/server/supabase";
 
@@ -27,9 +28,13 @@ export const Route = createFileRoute("/api/connectors/$provider/authorize")({
 
         let authorizeUrl = provider.authorizeUrl;
         if (provider.requiresShopParam) {
-          const shop = url.searchParams.get("shop");
-          if (!shop) return redirectToSettings(origin, providerId, "missing_shop");
-          authorizeUrl = authorizeUrl.replace("{shop}", shop);
+          const rawShop = url.searchParams.get("shop");
+          if (!rawShop) return redirectToSettings(origin, providerId, "missing_shop");
+          // Accepts "my-store" or "my-store.myshopify.com"; rejects anything
+          // that isn't a real Shopify domain.
+          const shop = normalizeShop(rawShop);
+          if (!shop) return redirectToSettings(origin, providerId, "invalid_shop");
+          authorizeUrl = authorizeUrl.replace("{shop}.myshopify.com", shop);
         }
 
         const db = getSupabaseAdmin();
@@ -46,11 +51,11 @@ export const Route = createFileRoute("/api/connectors/$provider/authorize")({
 
         const redirectUri = `${origin}/api/connectors/${providerId}/callback`;
         const authParams = new URLSearchParams({
-          client_id: provider.clientId,
+          [provider.clientIdParam ?? "client_id"]: provider.clientId,
           redirect_uri: redirectUri,
-          scope: provider.scope,
           response_type: "code",
           state,
+          ...(provider.scope ? { scope: provider.scope } : {}),
           ...(provider.extraAuthorizeParams ?? {}),
         });
 

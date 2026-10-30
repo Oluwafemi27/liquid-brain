@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { BarChart3, Check, Plus, Target, Trash2, Trophy, X } from "lucide-react";
+import { ArrowUpRight, BarChart3, Check, Plus, Target, Trash2, Trophy, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   Bar,
@@ -18,9 +18,100 @@ import {
   YAxis,
 } from "recharts";
 import { AppShell, PageHeader } from "@/components/aduf/app-shell";
-import { GlassCard, WaterOrb } from "@/components/aduf/liquid";
+import { GlassCard, ProgressRing, WaterOrb } from "@/components/aduf/liquid";
+import { InsightRow } from "@/components/aduf/insight-feed";
 import { formatUsd, toUsd, useUsdRates } from "@/lib/currency";
 import { useAduf } from "@/store/aduf-store";
+import type { Goal } from "@/lib/aduf-types";
+
+const RING_COLORS = ["var(--accent)", "var(--violet)", "var(--cyan)"];
+
+/** Moved here from the Brain page — this is the "Today" snapshot of your
+ *  top goals as progress rings. It used to link out to /goals, which made
+ *  no sense once it lives ON /goals, so that link is gone; it now just
+ *  scrolls down to the full goal list further down this same page. */
+function GoalProgressBanner({ goals }: { goals: Goal[] }) {
+  const top = goals.slice(0, 3);
+  const placeholders = Math.max(0, 3 - top.length);
+
+  return (
+    <GlassCard hover={false} className="mb-6">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Today</p>
+          <h2 className="mt-0.5 truncate text-base font-semibold sm:text-lg">
+            Goal Progress Dashboard
+          </h2>
+        </div>
+      </div>
+
+      {goals.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-4 text-center">
+          <p className="text-sm text-muted-foreground">No goals set yet — create one below.</p>
+        </div>
+      ) : (
+        <div className="flex flex-wrap justify-center gap-6 sm:justify-between sm:gap-4">
+          {top.map((g, i) => {
+            const pct = Math.round((g.current / g.target) * 100);
+            return (
+              <ProgressRing
+                key={g.id}
+                value={pct}
+                label={`${Math.min(100, pct)}%`}
+                sublabel={g.title}
+                color={RING_COLORS[i % RING_COLORS.length] ?? "var(--accent)"}
+              />
+            );
+          })}
+          {Array.from({ length: placeholders }).map((_, i) => (
+            <ProgressRing key={`ph-${i}`} value={0} label="+" sublabel="Add goal" dashed />
+          ))}
+        </div>
+      )}
+    </GlassCard>
+  );
+}
+
+/** Also moved here from the Brain page. "View all" still points at
+ *  /notifications, which is still the right place for the full history. */
+function InsightFeedCard() {
+  const { insights, markInsightRead } = useAduf();
+  const unread = insights.filter((i) => !i.read).length;
+  const recent = insights.slice(0, 3);
+
+  return (
+    <GlassCard hover={false} className="mb-6 p-3 sm:p-4">
+      <div className="mb-1 flex items-center justify-between gap-3 px-1">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold">Insight Feed</h2>
+          {unread > 0 ? (
+            <span className="rounded-full bg-cyan/15 px-2 py-0.5 text-[10px] font-medium text-cyan">
+              {unread} new
+            </span>
+          ) : null}
+        </div>
+        <Link
+          to="/notifications"
+          className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+        >
+          View all
+          <ArrowUpRight className="h-3 w-3" />
+        </Link>
+      </div>
+      {recent.length === 0 ? (
+        <p className="px-1 py-3 text-xs text-muted-foreground">
+          Nothing yet — ADUF will drop signals here as your business moves.
+        </p>
+      ) : (
+        <div className="space-y-1">
+          {recent.map((insight) => (
+            <InsightRow key={insight.id} insight={insight} onRead={markInsightRead} compact />
+          ))}
+        </div>
+      )}
+    </GlassCard>
+  );
+}
 
 export const Route = createFileRoute("/goals")({
   head: () => ({
@@ -142,6 +233,9 @@ function GoalsPage() {
             <Plus className="h-4 w-4" /> New Goal
           </button>
         </PageHeader>
+
+        <GoalProgressBanner goals={goals} />
+        <InsightFeedCard />
 
         {creating ? (
           <GlassCard hover={false} className="mb-6">

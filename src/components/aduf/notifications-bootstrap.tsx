@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { fetchInsightsFn } from "@/lib/server-fns";
 import { useAduf } from "@/store/aduf-store";
+import { useAuth } from "@/store/auth-store";
 import type { InsightSeverity } from "@/lib/aduf-types";
 
 /** Raw shape of a Supabase realtime row for `insights` — snake_case, as
@@ -24,10 +25,12 @@ interface InsightRealtimeRow {
  *  here within moments, no manual refetch needed. Renders nothing. */
 export function NotificationsBootstrap() {
   const { setInsights, upsertInsight, removeInsight } = useAduf();
+  const { user, accessToken } = useAuth();
 
   useEffect(() => {
+    if (!user) return;
     let cancelled = false;
-    fetchInsightsFn()
+    fetchInsightsFn({ data: { accessToken } })
       .then((insights) => {
         if (!cancelled) setInsights(insights);
       })
@@ -37,17 +40,17 @@ export function NotificationsBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, [setInsights]);
+  }, [user, accessToken, setInsights]);
 
   useEffect(() => {
     const client = getSupabaseBrowser();
-    if (!client) return;
+    if (!client || !user) return;
 
     const channel = client
-      .channel("insights-realtime")
+      .channel(`insights-realtime-${user.id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "insights" },
+        { event: "*", schema: "public", table: "insights", filter: `user_id=eq.${user.id}` },
         (payload) => {
           if (payload.eventType === "DELETE") {
             const oldId = (payload.old as { id?: string })["id"];
@@ -71,7 +74,7 @@ export function NotificationsBootstrap() {
     return () => {
       client.removeChannel(channel);
     };
-  }, [upsertInsight, removeInsight]);
+  }, [user, upsertInsight, removeInsight]);
 
   return null;
 }

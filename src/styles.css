@@ -120,6 +120,20 @@
   border-radius: var(--radius-2xl);
 }
 
+/* Floating popovers (dropdown menus, the "recent chats" panel, the attach
+ * menu) sit on top of scrolling/dynamic content, not a fixed dark
+ * backdrop — `.glass`'s 7% background only reads as "glass" when
+ * backdrop-filter has something solid behind it to blur, and it renders as
+ * effectively invisible/transparent when it doesn't (older browsers,
+ * certain compositing contexts, etc). This is the same look but with a
+ * solid, always-legible background as the base layer. */
+@utility glass-solid {
+  background: color-mix(in oklch, var(--color-popover) 96%, transparent);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-glass);
+}
+
 @utility glass-hover {
   transition:
     transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),

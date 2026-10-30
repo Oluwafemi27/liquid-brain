@@ -1,8 +1,14 @@
+import { DataPrivacyPanel } from "@/components/aduf/data-privacy-panel";
+import { IntegrationAccess } from "@/components/aduf/integration-access";
+import { SafetyPanel } from "@/components/aduf/safety-panel";
+import type { ConnectionHealth } from "@/lib/aduf-types";
+import { fetchConnectionHealthFn } from "@/lib/server-fns";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { BadgeCheck, Bell, Blocks, LogOut, ShieldCheck, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell, PageHeader } from "@/components/aduf/app-shell";
+import { KeyConnectorDialog } from "@/components/aduf/key-connector-dialog";
 import { GlassCard } from "@/components/aduf/liquid";
 import { ModelKeysPanel } from "@/components/aduf/model-keys-panel";
 import { N8nConnectionPanel } from "@/components/aduf/n8n-connection-panel";
@@ -10,13 +16,13 @@ import { SkillsPanel } from "@/components/aduf/skills-panel";
 import { TelegramConnectionPanel } from "@/components/aduf/telegram-connection-panel";
 import { useAduf } from "@/store/aduf-store";
 import { useAuth } from "@/store/auth-store";
-import { checkIsAdminFn, fetchConnectorStatuses } from "@/lib/server-fns";
+import { OAUTH_CONNECTOR_IDS, isKeyConnector } from "@/lib/connector-catalog";
+import { checkIsAdminFn } from "@/lib/server-fns";
 
 /** Providers with a real OAuth redirect flow (see src/lib/server/oauth-providers.ts).
- *  Telegram is key-based and has its own panel below. Everything else
- *  (currently just Paystack) keeps the local demo "pour" animation until a
- *  real key-entry flow is built. */
-const OAUTH_SOURCE_IDS = new Set(["shopify", "ga", "meta", "sheets"]);
+ *  Pasted-credential providers (Semrush, Jumia, Paystack) open a dialog instead,
+ *  and Telegram has its own panel below. */
+const OAUTH_SOURCE_IDS = new Set<string>(OAUTH_CONNECTOR_IDS);
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -43,6 +49,8 @@ const CONNECTOR_ERROR_COPY: Record<string, string> = {
   backend_not_configured:
     "No backend is connected yet, so ADUF can't securely store this connection.",
   missing_shop: "Enter your shop domain to connect Shopify.",
+  invalid_shop: "That doesn't look like a Shopify store domain (e.g. my-store.myshopify.com).",
+  invalid_signature: "Shopify's response couldn't be verified — try connecting again.",
   invalid_state: "That connection attempt expired or wasn't recognised — try again.",
   expired_state: "That connection attempt expired — try again.",
   provider_denied: "The connection was cancelled.",
@@ -53,11 +61,18 @@ const CONNECTOR_ERROR_COPY: Record<string, string> = {
 };
 
 function SettingsPage() {
-  const { sources, connectSource, setSourceConnected, userName, setUserName } = useAduf();
+  const {
+    sources,
+    connectorsConfigured: configured,
+    setSourceConnected,
+    userName,
+    setUserName,
+  } = useAduf();
   const { accessToken, status, signOut } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [healthById, setHealthById] = useState<Record<string, ConnectionHealth>>({});
   const [pouring, setPouring] = useState<string | null>(null);
-  const [configured, setConfigured] = useState<Record<string, boolean>>({});
+  const [keyDialog, setKeyDialog] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
   // Only shows the Admin Panel link if this signed-in user is actually on
@@ -74,21 +89,15 @@ function SettingsPage() {
       .catch(() => setIsAdmin(false));
   }, [status, accessToken]);
 
-  // Pull real connection state + which providers have OAuth apps registered.
+  // Live / delayed / broken for every connected integration.
   useEffect(() => {
-    fetchConnectorStatuses()
-      .then((statuses) => {
-        setConfigured(
-          Object.fromEntries(Object.entries(statuses).map(([id, s]) => [id, s.configured])),
-        );
-        for (const [id, status] of Object.entries(statuses)) {
-          setSourceConnected(id, status.connected);
-        }
+    if (status !== "signed-in" || !accessToken) return;
+    fetchConnectionHealthFn({ data: { accessToken } })
+      .then((res) => {
+        if (res.ok) setHealthById(Object.fromEntries(res.health.map((h) => [h.id, h])));
       })
-      .catch(() => {
-        // No backend yet — sources stay whatever the local mock state says.
-      });
-  }, [setSourceConnected]);
+      .catch(() => undefined);
+  }, [status, accessToken]);
 
   // Surface the redirect back from /api/connectors/:provider/callback.
   useEffect(() => {
@@ -122,23 +131,56 @@ function SettingsPage() {
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
+    if (isKeyConnector(id)) {
+      // Pasted credentials, stored encrypted server-side — admin only.
+      if (!isAdmin) {
+        setBanner({
+          kind: "error",
+          text: "Only the workspace admin can connect this integration.",
+        });
+        return;
+      }
+      setKeyDialog(id);
+      return;
+    }
     if (OAUTH_SOURCE_IDS.has(id) && configured[id]) {
+      let target = `/api/connectors/${id}/authorize`;
       if (id === "shopify") {
         const shop = window.prompt("Your Shopify store domain (e.g. my-store):");
         if (!shop) return;
-        window.location.href = `/api/connectors/shopify/authorize?shop=${encodeURIComponent(shop)}`;
-        return;
+        target = `/api/connectors/shopify/authorize?shop=${encodeURIComponent(shop)}`;
       }
-      window.location.href = `/api/connectors/${id}/authorize`;
+      // Play the water-pouring animation, then hand off to the provider.
+      setPouring(id);
+      setTimeout(() => {
+        window.location.href = target;
+      }, 700);
       return;
     }
-    // Not yet configured with real OAuth app credentials, or a key-based
-    // provider (Paystack) — fall back to the local demo connect.
-    setPouring(id);
-    setTimeout(() => {
-      connectSource(id);
-      setPouring(null);
-    }, 1200);
+    // No OAuth app registered for this provider yet. Don't fake a connection —
+    // it would never reach Supabase and every other page would disagree.
+    setBanner({ kind: "error", text: CONNECTOR_ERROR_COPY["not_configured"]! });
+  };
+
+  const disconnect = async (id: string) => {
+    if (!accessToken || !isAdmin) {
+      setBanner({ kind: "error", text: "Only the workspace admin can disconnect integrations." });
+      return;
+    }
+    try {
+      const res = await fetch(`/api/connectors/${id}/manage`, {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
+      setSourceConnected(id, false);
+      setBanner({ kind: "success", text: "Disconnected." });
+    } catch (e) {
+      setBanner({
+        kind: "error",
+        text: e instanceof Error && e.message ? e.message : "Couldn't disconnect.",
+      });
+    }
   };
 
   return (
@@ -275,17 +317,42 @@ function SettingsPage() {
                       >
                         {s.connected ? "Connected" : pouring === s.id ? "Pouring…" : "Connect"}
                       </button>
+                      <IntegrationAccess
+                        id={s.id}
+                        connected={s.connected}
+                        health={healthById[s.id]}
+                      />
+                      {s.connected && s.id !== "telegram" && isAdmin ? (
+                        <button
+                          type="button"
+                          onClick={() => void disconnect(s.id)}
+                          className="mt-2 w-full text-center text-[11px] text-muted-foreground hover:text-red-400"
+                        >
+                          Disconnect
+                        </button>
+                      ) : null}
                     </div>
                   </GlassCard>
                 ))}
               </div>
             </div>
 
+            <SafetyPanel />
             <ModelKeysPanel />
             <SkillsPanel />
+            <DataPrivacyPanel />
           </div>
         </div>
       </div>
+      <KeyConnectorDialog
+        providerId={keyDialog}
+        providerName={sources.find((x) => x.id === keyDialog)?.name ?? ""}
+        onClose={() => setKeyDialog(null)}
+        onConnected={(id) => {
+          setSourceConnected(id, true);
+          setBanner({ kind: "success", text: "Connected." });
+        }}
+      />
     </AppShell>
   );
 }

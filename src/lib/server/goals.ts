@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 import type { Goal, SubTask } from "@/lib/aduf-types";
-import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin } from "./supabase";
 
 interface GoalRow {
   id: string;
@@ -24,17 +24,19 @@ function fromRow(row: GoalRow): Goal {
   };
 }
 
-/** Every goal for the workspace, newest first. Returns [] if no backend is
- *  configured — the app runs fine without persistence, it just won't have
- *  goals survive a reload. */
-export async function listGoals(): Promise<Goal[]> {
+const SELECT_COLS = "id, title, target, current, currency, due, sub_tasks";
+
+/** Every goal belonging to this user, oldest first. Returns [] if no
+ *  backend is configured — the app runs fine without persistence, it just
+ *  won't have goals survive a reload. */
+export async function listGoals(userId: string): Promise<Goal[]> {
   const db = getSupabaseAdmin();
   if (!db) return [];
 
   const { data, error } = await db
     .from("goals")
-    .select("id, title, target, current, currency, due, sub_tasks")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .select(SELECT_COLS)
+    .eq("user_id", userId)
     .order("created_at", { ascending: true });
   if (error) {
     console.error("[goals] failed to list goals", error);
@@ -44,6 +46,7 @@ export async function listGoals(): Promise<Goal[]> {
 }
 
 export async function createGoal(
+  userId: string,
   title: string,
   target: number,
   currency: string,
@@ -53,8 +56,8 @@ export async function createGoal(
 
   const { data, error } = await db
     .from("goals")
-    .insert({ workspace_id: DEFAULT_WORKSPACE_ID, title, target, currency })
-    .select("id, title, target, current, currency, due, sub_tasks")
+    .insert({ user_id: userId, title, target, currency })
+    .select(SELECT_COLS)
     .single();
   if (error || !data) {
     console.error("[goals] failed to create goal", error);
@@ -64,14 +67,18 @@ export async function createGoal(
 }
 
 /** Adds `amount` to a goal's current progress (clamped to >= 0). */
-export async function bumpGoal(goalId: string, amount: number): Promise<Goal | null> {
+export async function bumpGoal(
+  userId: string,
+  goalId: string,
+  amount: number,
+): Promise<Goal | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
 
   const { data: existing, error: readError } = await db
     .from("goals")
     .select("current")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .eq("id", goalId)
     .single();
   if (readError || !existing) {
@@ -83,9 +90,9 @@ export async function bumpGoal(goalId: string, amount: number): Promise<Goal | n
   const { data, error } = await db
     .from("goals")
     .update({ current: nextCurrent, updated_at: new Date().toISOString() })
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .eq("id", goalId)
-    .select("id, title, target, current, currency, due, sub_tasks")
+    .select(SELECT_COLS)
     .single();
   if (error || !data) {
     console.error("[goals] failed to bump goal", error);
@@ -99,6 +106,7 @@ export async function bumpGoal(goalId: string, amount: number): Promise<Goal | n
  *  it's what the "Edit Plan" button on the Goals page calls. Only fields
  *  actually passed in are updated. */
 export async function updateGoal(
+  userId: string,
   goalId: string,
   patch: { title?: string; target?: number; currency?: string; due?: string },
 ): Promise<Goal | null> {
@@ -114,9 +122,9 @@ export async function updateGoal(
   const { data, error } = await db
     .from("goals")
     .update(updates)
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .eq("id", goalId)
-    .select("id, title, target, current, currency, due, sub_tasks")
+    .select(SELECT_COLS)
     .single();
   if (error || !data) {
     console.error("[goals] failed to update goal", error);
@@ -125,14 +133,18 @@ export async function updateGoal(
   return fromRow(data);
 }
 
-export async function toggleGoalSubTask(goalId: string, taskId: string): Promise<Goal | null> {
+export async function toggleGoalSubTask(
+  userId: string,
+  goalId: string,
+  taskId: string,
+): Promise<Goal | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
 
   const { data: existing, error: readError } = await db
     .from("goals")
     .select("sub_tasks")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .eq("id", goalId)
     .single();
   if (readError || !existing) {
@@ -146,9 +158,9 @@ export async function toggleGoalSubTask(goalId: string, taskId: string): Promise
   const { data, error } = await db
     .from("goals")
     .update({ sub_tasks: nextSubTasks, updated_at: new Date().toISOString() })
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .eq("id", goalId)
-    .select("id, title, target, current, currency, due, sub_tasks")
+    .select(SELECT_COLS)
     .single();
   if (error || !data) {
     console.error("[goals] failed to toggle subtask", error);
@@ -157,15 +169,11 @@ export async function toggleGoalSubTask(goalId: string, taskId: string): Promise
   return fromRow(data);
 }
 
-export async function deleteGoal(goalId: string): Promise<boolean> {
+export async function deleteGoal(userId: string, goalId: string): Promise<boolean> {
   const db = getSupabaseAdmin();
   if (!db) return false;
 
-  const { error } = await db
-    .from("goals")
-    .delete()
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
-    .eq("id", goalId);
+  const { error } = await db.from("goals").delete().eq("user_id", userId).eq("id", goalId);
   if (error) {
     console.error("[goals] failed to delete goal", error);
     return false;

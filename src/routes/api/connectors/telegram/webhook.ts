@@ -1,9 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  recordTelegramUpdate,
-  verifyTelegramWebhookSecret,
-  type TgUpdate,
-} from "@/lib/server/telegram";
+import { handleTelegramUpdate } from "@/lib/server/telegram-agent";
+import { verifyTelegramWebhookSecret, type TgUpdate } from "@/lib/server/telegram";
 
 /** Telegram → ADUF. Telegram includes the secret we gave it in setWebhook as
  *  the X-Telegram-Bot-Api-Secret-Token header; anything without a matching
@@ -26,7 +23,10 @@ export const Route = createFileRoute("/api/connectors/telegram/webhook")({
         if (typeof update?.update_id !== "number") {
           return new Response("Bad request", { status: 400 });
         }
-        await recordTelegramUpdate(update);
+        // Answered inline (awaited): the platform may freeze the function as
+        // soon as the response is sent. handleTelegramUpdate never throws and
+        // dedupes on update_id, so a Telegram retry can't double-reply.
+        await handleTelegramUpdate(update);
         // Always 200 for valid updates — non-200 makes Telegram retry.
         return new Response("ok", { status: 200 });
       },

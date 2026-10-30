@@ -14,7 +14,13 @@ export interface N8nConnectionStatus {
 export async function getN8nConnectionStatus(): Promise<N8nConnectionStatus> {
   const db = getSupabaseAdmin();
   if (!db) {
-    return { connected: false, instanceUrl: null, label: null, lastVerifiedAt: null, lastVerifyError: null };
+    return {
+      connected: false,
+      instanceUrl: null,
+      label: null,
+      lastVerifiedAt: null,
+      lastVerifyError: null,
+    };
   }
   const { data } = await db
     .from("n8n_connections")
@@ -22,7 +28,13 @@ export async function getN8nConnectionStatus(): Promise<N8nConnectionStatus> {
     .eq("workspace_id", DEFAULT_WORKSPACE_ID)
     .maybeSingle();
   if (!data) {
-    return { connected: false, instanceUrl: null, label: null, lastVerifiedAt: null, lastVerifyError: null };
+    return {
+      connected: false,
+      instanceUrl: null,
+      label: null,
+      lastVerifiedAt: null,
+      lastVerifyError: null,
+    };
   }
   return {
     connected: Boolean(data["connected"]),
@@ -47,7 +59,11 @@ export async function storeN8nConnection(
   if (!verify.ok) return verify;
 
   const db = getSupabaseAdmin();
-  if (!db) return { ok: false, error: "No backend configured — set SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY first." };
+  if (!db)
+    return {
+      ok: false,
+      error: "No backend configured — set SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY first.",
+    };
   const { error } = await db.rpc("store_n8n_connection", {
     p_workspace_id: DEFAULT_WORKSPACE_ID,
     p_instance_url: normalizedUrl,
@@ -74,7 +90,10 @@ export async function deleteN8nConnection(): Promise<void> {
 /** The decrypted instance URL + API key for the current workspace, or null
  *  if nothing is connected. Never sent to the client — only used server-side
  *  by n8n-client.ts to call the owner's own n8n instance. */
-export async function resolveN8nConnection(): Promise<{ instanceUrl: string; apiKey: string } | null> {
+export async function resolveN8nConnection(): Promise<{
+  instanceUrl: string;
+  apiKey: string;
+} | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
   const { data, error } = await db
@@ -98,7 +117,10 @@ export async function verifyN8nCredentials(
       headers: { "X-N8N-API-KEY": apiKey },
     });
     if (res.status === 401 || res.status === 403) {
-      return { ok: false, error: "n8n rejected that API key — check it's a valid API key, not a login password." };
+      return {
+        ok: false,
+        error: "n8n rejected that API key — check it's a valid API key, not a login password.",
+      };
     }
     if (!res.ok) {
       return { ok: false, error: `n8n instance returned ${res.status} — check the instance URL.` };

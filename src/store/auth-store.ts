@@ -27,12 +27,20 @@ interface AuthState {
   openSignIn: () => void;
   closeSignIn: () => void;
   signInWithGoogle: () => Promise<void>;
+  /** Emails a one-time sign-in link (no password, no Google account needed). */
+  signInWithEmail: (email: string) => Promise<{ ok: boolean; message: string }>;
   signOut: () => Promise<void>;
   setSurveyStatus: (status: "pending" | "done") => void;
   /** Returns true if the user is signed in. If not, opens the sign-in modal
    *  and returns false — call this as a guard before any action that talks
    *  to the AI. */
   requireAuth: () => boolean;
+}
+
+/** The root <head> sets data-session="maybe" when a saved login exists, hiding the landing page
+ *  so returning users don't see it flash before their app loads. Remove it once we know. */
+function clearSessionHint() {
+  if (typeof document !== "undefined") document.documentElement.removeAttribute("data-session");
 }
 
 function toAuthUser(supabaseUser: {
@@ -64,12 +72,14 @@ export const useAuth = create<AuthState>((set, get) => ({
     set({ initialized: true });
     const client = getSupabaseBrowser();
     if (!client) {
+      clearSessionHint();
       set({ status: "signed-out" });
       return;
     }
 
     client.auth.getSession().then(({ data }) => {
       const session = data.session;
+      clearSessionHint();
       set(
         session
           ? {
@@ -114,6 +124,27 @@ export const useAuth = create<AuthState>((set, get) => ({
       provider: "google",
       options: { redirectTo: window.location.origin },
     });
+  },
+
+  signInWithEmail: async (email) => {
+    const client = getSupabaseBrowser();
+    if (!client) return { ok: false, message: "Sign-in isn't available right now." };
+    const clean = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean))
+      return { ok: false, message: "That doesn't look like an email address." };
+    const { error } = await client.auth.signInWithOtp({
+      email: clean,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    if (error) {
+      return {
+        ok: false,
+        message: /rate|seconds|too many/i.test(error.message)
+          ? "Too many requests — wait a minute and try again."
+          : "Couldn't send the link. Check the address and try again.",
+      };
+    }
+    return { ok: true, message: `Check ${clean} — we've sent you a sign-in link.` };
   },
 
   signOut: async () => {

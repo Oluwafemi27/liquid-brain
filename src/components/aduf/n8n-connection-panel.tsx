@@ -33,7 +33,6 @@ export function N8nConnectionPanel() {
       .finally(() => setLoading(false));
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, []);
 
   const connect = async () => {
@@ -128,8 +127,8 @@ export function N8nConnectionPanel() {
       <div className="flex items-start gap-1.5 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
         <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0" />
         <span>
-          API key create it under n8n Settings &gt; API. ADUF only ever creates workflows inactive
-          — nothing runs against real customers until you tap "Turn it on".
+          API key create it under n8n Settings &gt; API. ADUF only ever creates workflows inactive —
+          nothing runs against real customers until you tap "Turn it on".
         </span>
       </div>
       {error ? <p className="text-xs text-amber-400">{error}</p> : null}

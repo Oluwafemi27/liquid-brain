@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import type { Automation, Goal } from "@/lib/aduf-types";
 import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
 import { verifyAccessToken } from "./survey";
 
@@ -105,7 +106,10 @@ export interface AdminOverview {
   totalChatMessages: number;
 }
 
-/** Workspace-wide counters for the admin dashboard's overview cards. */
+/** Site-wide counters for the admin dashboard's overview cards, summed
+ *  across every real user (each row is scoped by its own user_id — see
+ *  migration 014 — workspace_id is now just a leftover legacy tag every
+ *  row still carries, not a tenant boundary). */
 export async function getAdminOverview(accessToken: string): Promise<AdminOverview | null> {
   const requester = await verifyAccessToken(accessToken);
   if (!(await isAdminEmail(requester?.email))) return null;
@@ -142,4 +146,160 @@ export async function getAdminOverview(accessToken: string): Promise<AdminOvervi
     totalAutomationRuns: runs.count ?? 0,
     totalChatMessages: messages.count ?? 0,
   };
+}
+
+/** Builds a userId -> display label map from Supabase Auth — shared by the
+ *  admin automations/goals listings below so each row can show who it
+ *  actually belongs to. */
+async function userLabelsById(
+  db: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+): Promise<Map<string, string>> {
+  const { data } = await db.auth.admin.listUsers({ perPage: 200 });
+  const map = new Map<string, string>();
+  for (const u of data?.users ?? []) {
+    const label =
+      (u.user_metadata?.["full_name"] as string | undefined) ??
+      (u.user_metadata?.["name"] as string | undefined) ??
+      u.email ??
+      u.id;
+    map.set(u.id, label);
+  }
+  return map;
+}
+
+export interface AdminAutomationRow extends Automation {
+  ownerId: string;
+  ownerLabel: string;
+}
+
+/** Every automation across every user, each tagged with its real owner —
+ *  this is what actually fixes the reported bug: the admin Automations tab
+ *  used to just read the one shared automations table and present it as
+ *  if it were "everyone's" data, when it was really only ever one set.
+ *  Now that automations are genuinely per-user, this is the only correct
+ *  way for an admin to see "all automations": explicitly fetch across
+ *  every user_id and label each row with who it belongs to, rather than
+ *  calling the same per-user listAutomations() the regular app uses (which
+ *  would now — correctly — only return the admin's own). */
+export async function adminListAllAutomations(accessToken: string): Promise<AdminAutomationRow[]> {
+  const requester = await verifyAccessToken(accessToken);
+  if (!(await isAdminEmail(requester?.email))) return [];
+  const db = getSupabaseAdmin();
+  if (!db) return [];
+
+  const [{ data: rows, error }, labels] = await Promise.all([
+    db
+      .from("automations")
+      .select(
+        "id, user_id, name, enabled, trigger, action, goal, runs, channel, source, steps, goal_id",
+      )
+      .order("created_at", { ascending: false }),
+    userLabelsById(db),
+  ]);
+  if (error) {
+    console.error("[admin] failed to list all automations", error);
+    return [];
+  }
+
+  return (rows ?? []).map((row) => ({
+    id: row["id"] as string,
+    ownerId: row["user_id"] as string,
+    ownerLabel: labels.get(row["user_id"] as string) ?? "Unknown user",
+    name: row["name"] as string,
+    enabled: row["enabled"] as boolean,
+    trigger: row["trigger"] as string,
+    action: row["action"] as string,
+    goal: row["goal"] as string,
+    runs: row["runs"] as number,
+    channel: (row["channel"] as Automation["channel"] | null) ?? undefined,
+    source: row["source"] as Automation["source"],
+    steps: (row["steps"] as Automation["steps"] | null) ?? undefined,
+    goalId: (row["goal_id"] as string | null) ?? undefined,
+  }));
+}
+
+/** Admin-only: toggles any user's automation by (ownerId, id) — distinct
+ *  from the regular setAutomationEnabled(userId, id) in automations.ts,
+ *  which only ever lets a user touch their own row. Used solely by the
+ *  admin panel, and gated on the caller actually being an admin. */
+export async function adminSetAutomationEnabled(
+  accessToken: string,
+  ownerId: string,
+  automationId: string,
+  enabled: boolean,
+): Promise<{ ok: boolean }> {
+  const requester = await verifyAccessToken(accessToken);
+  if (!(await isAdminEmail(requester?.email))) return { ok: false };
+  const db = getSupabaseAdmin();
+  if (!db) return { ok: false };
+
+  const { error } = await db
+    .from("automations")
+    .update({ enabled, updated_at: new Date().toISOString() })
+    .eq("user_id", ownerId)
+    .eq("id", automationId);
+  if (error) {
+    console.error("[admin] failed to toggle automation", error);
+    return { ok: false };
+  }
+  return { ok: true };
+}
+
+export interface AdminGoalRow extends Goal {
+  ownerId: string;
+  ownerLabel: string;
+}
+
+/** Every goal across every user, each tagged with its real owner — same
+ *  fix as adminListAllAutomations above, applied to Goals. */
+export async function adminListAllGoals(accessToken: string): Promise<AdminGoalRow[]> {
+  const requester = await verifyAccessToken(accessToken);
+  if (!(await isAdminEmail(requester?.email))) return [];
+  const db = getSupabaseAdmin();
+  if (!db) return [];
+
+  const [{ data: rows, error }, labels] = await Promise.all([
+    db
+      .from("goals")
+      .select("id, user_id, title, target, current, currency, due, sub_tasks")
+      .order("created_at", { ascending: false }),
+    userLabelsById(db),
+  ]);
+  if (error) {
+    console.error("[admin] failed to list all goals", error);
+    return [];
+  }
+
+  return (rows ?? []).map((row) => ({
+    id: row["id"] as string,
+    ownerId: row["user_id"] as string,
+    ownerLabel: labels.get(row["user_id"] as string) ?? "Unknown user",
+    title: row["title"] as string,
+    target: row["target"] as number,
+    current: row["current"] as number,
+    currency: row["currency"] as string,
+    due: row["due"] as string,
+    subTasks: (row["sub_tasks"] as Goal["subTasks"]) ?? [],
+  }));
+}
+
+/** Admin-only: deletes any user's goal by (ownerId, id) — distinct from
+ *  the regular deleteGoal(userId, id) in goals.ts, which only ever lets a
+ *  user delete their own. Used solely by the admin panel. */
+export async function adminDeleteGoal(
+  accessToken: string,
+  ownerId: string,
+  goalId: string,
+): Promise<{ ok: boolean }> {
+  const requester = await verifyAccessToken(accessToken);
+  if (!(await isAdminEmail(requester?.email))) return { ok: false };
+  const db = getSupabaseAdmin();
+  if (!db) return { ok: false };
+
+  const { error } = await db.from("goals").delete().eq("user_id", ownerId).eq("id", goalId);
+  if (error) {
+    console.error("[admin] failed to delete goal", error);
+    return { ok: false };
+  }
+  return { ok: true };
 }

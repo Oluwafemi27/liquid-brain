@@ -89,8 +89,15 @@ export const Route = createFileRoute("/automations")({
 });
 
 function AutomationsPage() {
-  const { automations, toggleAutomation, runAutomation, insights, n8nDeployments, fetchN8nDeployments, activateN8nDeployment } =
-    useAduf();
+  const {
+    automations,
+    toggleAutomation,
+    runAutomation,
+    insights,
+    n8nDeployments,
+    fetchN8nDeployments,
+    activateN8nDeployment,
+  } = useAduf();
   const [open, setOpen] = useState<string | null>(null);
   const active = automations.find((a) => a.id === open) ?? null;
   const liveCount = automations.filter((a) => a.enabled).length;
@@ -416,7 +423,9 @@ function AutomationsPage() {
                     </div>
                     <p className="mt-1 truncate text-xs text-muted-foreground">{d.reasoning}</p>
                     {d.status === "error" ? (
-                      <p className="mt-1 text-xs text-amber-400">{d.lastError ?? "Deploy failed"}</p>
+                      <p className="mt-1 text-xs text-amber-400">
+                        {d.lastError ?? "Deploy failed"}
+                      </p>
                     ) : d.status === "inactive" || d.status === "draft" ? (
                       <p className="mt-1 text-xs text-cyan">I built it. Want me to turn it on?</p>
                     ) : null}

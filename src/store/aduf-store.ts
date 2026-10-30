@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import type {
+  AnalyticsSummary,
   Automation,
+  BusinessData,
   ChannelId,
+  ChatAttachment,
   ChatMessage,
   ChannelRevenue,
   CrmDeal,
@@ -86,6 +89,18 @@ interface AdufState {
   memoryNodes: MemoryNode[];
   memoryEdges: MemoryEdge[];
   sources: DataSource[];
+  /** Which integrations have their OAuth app / key flow set up on the server. */
+  connectorsConfigured: Record<string, boolean>;
+  /** Whether connector status has been loaded from Supabase at least once, so
+   *  pages can tell "not connected" apart from "haven't checked yet". */
+  connectorsLoaded: boolean;
+  /** Live analytics computed from Supabase (null until first load). */
+  analytics: AnalyticsSummary | null;
+  /** Provenance + import history for the business panels (null until first load). */
+  businessMeta: Omit<
+    BusinessData,
+    "series" | "deals" | "topCustomers" | "channelRevenue" | "funnel"
+  > | null;
   messages: ChatMessage[];
   thinking: boolean;
   sessionId: string;
@@ -146,9 +161,16 @@ interface AdufState {
   /** Replaces the Business Memory graph — used to hydrate from Supabase on
    *  load and to apply live updates from the realtime subscription. */
   setMemoryGraph: (nodes: MemoryNode[], edges: MemoryEdge[]) => void;
-  connectSource: (id: string) => void;
+  /** Applies the real connection state from Supabase to every data source.
+   *  Called by ConnectorsBootstrap, so every page agrees on what's connected. */
+  setConnectorStatuses: (
+    statuses: Record<string, { connected: boolean; configured: boolean }>,
+  ) => void;
   setSourceConnected: (id: string, connected: boolean) => void;
-  sendMessage: (text: string) => void;
+  setAnalytics: (analytics: AnalyticsSummary) => void;
+  /** Hydrates the sales / leads / customers / deals / funnel panels from imported data. */
+  setBusinessData: (data: BusinessData) => void;
+  sendMessage: (text: string, attachment?: ChatAttachment) => void;
   /** Replaces the whole messages list — used to hydrate a session's saved
    *  history from Supabase on load. */
   setMessages: (messages: ChatMessage[]) => void;
@@ -180,11 +202,8 @@ interface AdufState {
   markInsightRead: (id: string) => void;
   markAllInsightsRead: () => void;
   dismissInsight: (id: string) => void;
-  /** Executes a pending proposedAction (creates the goal / flips the
-   *  automation) through the exact same paths the Goals and Automation
-   *  Grid pages use themselves, then marks the chat message approved. */
-  approveProposedAction: (messageId: string) => void;
-  dismissProposedAction: (messageId: string) => void;
+  // Approving / declining proposed actions is server-gated now (lib/server/actions.ts,
+  // surfaced through ActionCard) — there is deliberately no client-side path that applies one.
   /** Replaces the whole schedule list — used to hydrate from Supabase on load. */
   setScheduleEvents: (events: ScheduleEvent[]) => void;
   /** Inserts or replaces a single event by id — used by the realtime subscription. */
@@ -213,6 +232,10 @@ export const useAduf = create<AdufState>((set, get) => ({
   memoryNodes: [],
   memoryEdges: [],
   sources: initialDataSources,
+  connectorsConfigured: {},
+  connectorsLoaded: false,
+  analytics: null,
+  businessMeta: null,
   messages: [],
   thinking: false,
   sessionId: makeSessionId(),
@@ -224,7 +247,9 @@ export const useAduf = create<AdufState>((set, get) => ({
   toggleAutomation: (id) => {
     const automation = get().automations.find((item) => item.id === id);
     if (!automation) return;
-    setAutomationEnabledFn({ data: { id, enabled: !automation.enabled } })
+    setAutomationEnabledFn({
+      data: { accessToken: useAuth.getState().accessToken, id, enabled: !automation.enabled },
+    })
       .then((updated) => {
         if (updated) get().upsertAutomation(updated);
       })
@@ -234,7 +259,7 @@ export const useAduf = create<AdufState>((set, get) => ({
   setAutomations: (automations) => set({ automations }),
 
   createAutomation: (input) => {
-    createAutomationFn({ data: input })
+    createAutomationFn({ data: { accessToken: useAuth.getState().accessToken, ...input } })
       .then((automation) => {
         if (!automation) return;
         get().upsertAutomation(automation);
@@ -249,7 +274,7 @@ export const useAduf = create<AdufState>((set, get) => ({
   },
 
   runAutomation: (automationId) => {
-    runAutomationFn({ data: { automationId } })
+    runAutomationFn({ data: { accessToken: useAuth.getState().accessToken, automationId } })
       .then((run) => {
         if (!run) return;
         // Refresh the automation itself (run count, and its linked goal's
@@ -294,13 +319,13 @@ export const useAduf = create<AdufState>((set, get) => ({
     }),
 
   fetchN8nDeployments: () => {
-    fetchN8nDeploymentsFn()
+    fetchN8nDeploymentsFn({ data: { accessToken: useAuth.getState().accessToken } })
       .then((deployments) => set({ n8nDeployments: deployments }))
       .catch((err) => console.error("[n8n] fetchN8nDeployments failed", err));
   },
 
   deployN8nWorkflow: (input) => {
-    deployN8nWorkflowFn({ data: input })
+    deployN8nWorkflowFn({ data: { accessToken: useAuth.getState().accessToken, ...input } })
       .then((deployment) => {
         get().upsertN8nDeployment(deployment);
         const built = deployment.status === "error";
@@ -319,7 +344,7 @@ export const useAduf = create<AdufState>((set, get) => ({
   },
 
   activateN8nDeployment: (deploymentId) => {
-    activateN8nDeploymentFn({ data: { deploymentId } })
+    activateN8nDeploymentFn({ data: { accessToken: useAuth.getState().accessToken, deploymentId } })
       .then((deployment) => {
         get().upsertN8nDeployment(deployment);
         void get().createInsight({
@@ -332,26 +357,41 @@ export const useAduf = create<AdufState>((set, get) => ({
       .catch((err) => console.error("[n8n] activateN8nDeployment failed", err));
   },
 
-  // Goals are persisted server-side (Supabase) — these actions fire the
-  // request and let the response (or the realtime subscription in
-  // GoalsBootstrap) update local state, rather than mutating optimistic
-  // local-only state that a reload would lose.
+  // Goals are persisted server-side (Supabase). These actions now update
+  // local state immediately (optimistic) so the goal completion dashboard
+  // and progress rings feel realtime the instant you act, then reconcile
+  // with the server's response — or the realtime subscription in
+  // GoalsBootstrap, or another open tab/session — as the source of truth.
+  // If the request fails, the optimistic change is rolled back so the UI
+  // never drifts from what's actually saved.
 
   toggleSubTask: (goalId, taskId) => {
-    toggleGoalSubTaskFn({ data: { goalId, taskId } })
+    const before = get().goals.find((g) => g.id === goalId);
+    if (!before) return;
+    const optimistic: Goal = {
+      ...before,
+      subTasks: before.subTasks.map((t) => (t.id === taskId ? { ...t, done: !t.done } : t)),
+    };
+    get().upsertGoal(optimistic);
+    toggleGoalSubTaskFn({ data: { accessToken: useAuth.getState().accessToken, goalId, taskId } })
       .then((goal) => {
         if (goal) get().upsertGoal(goal);
       })
-      .catch((err) => console.error("[goals] toggleSubTask failed", err));
+      .catch((err) => {
+        console.error("[goals] toggleSubTask failed", err);
+        get().upsertGoal(before);
+      });
   },
 
   bumpGoal: (goalId, amount) => {
     const before = get().goals.find((g) => g.id === goalId);
-    bumpGoalFn({ data: { goalId, amount } })
+    if (!before) return;
+    get().upsertGoal({ ...before, current: before.current + amount });
+    bumpGoalFn({ data: { accessToken: useAuth.getState().accessToken, goalId, amount } })
       .then((after) => {
         if (!after) return;
         get().upsertGoal(after);
-        if (before && before.current < before.target && after.current >= after.target) {
+        if (before.current < before.target && after.current >= after.target) {
           void get().createInsight({
             title: `Goal reached: ${after.title}`,
             body: `You hit your target of ${after.currency}${after.target.toLocaleString()}. Nice work.`,
@@ -360,20 +400,47 @@ export const useAduf = create<AdufState>((set, get) => ({
           });
         }
       })
-      .catch((err) => console.error("[goals] bumpGoal failed", err));
+      .catch((err) => {
+        console.error("[goals] bumpGoal failed", err);
+        get().upsertGoal(before);
+      });
   },
 
   updateGoal: (goalId, patch) => {
-    updateGoalFn({ data: { goalId, ...patch } })
+    const before = get().goals.find((g) => g.id === goalId);
+    if (before) get().upsertGoal({ ...before, ...patch });
+    updateGoalFn({ data: { accessToken: useAuth.getState().accessToken, goalId, ...patch } })
       .then((updated) => {
         if (updated) get().upsertGoal(updated);
       })
-      .catch((err) => console.error("[goals] updateGoal failed", err));
+      .catch((err) => {
+        console.error("[goals] updateGoal failed", err);
+        if (before) get().upsertGoal(before);
+      });
   },
 
   addGoal: (title, target) => {
-    createGoalFn({ data: { title, target, currency: inferGoalCurrency(title) } })
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: Goal = {
+      id: tempId,
+      title,
+      target,
+      current: 0,
+      currency: inferGoalCurrency(title),
+      due: "",
+      subTasks: [],
+    };
+    get().upsertGoal(optimistic);
+    createGoalFn({
+      data: {
+        accessToken: useAuth.getState().accessToken,
+        title,
+        target,
+        currency: inferGoalCurrency(title),
+      },
+    })
       .then((goal) => {
+        get().removeGoal(tempId);
         if (!goal) return;
         get().upsertGoal(goal);
         void get().createInsight({
@@ -383,7 +450,10 @@ export const useAduf = create<AdufState>((set, get) => ({
           source: "Goals",
         });
       })
-      .catch((err) => console.error("[goals] addGoal failed", err));
+      .catch((err) => {
+        console.error("[goals] addGoal failed", err);
+        get().removeGoal(tempId);
+      });
   },
 
   setGoals: (goals) => set({ goals }),
@@ -403,7 +473,9 @@ export const useAduf = create<AdufState>((set, get) => ({
     const removed = get().goals.find((g) => g.id === goalId) ?? null;
     get().removeGoal(goalId);
     try {
-      const { ok } = await deleteGoalFn({ data: { goalId } });
+      const { ok } = await deleteGoalFn({
+        data: { accessToken: useAuth.getState().accessToken, goalId },
+      });
       if (!ok && removed) get().upsertGoal(removed);
     } catch {
       if (removed) get().upsertGoal(removed);
@@ -411,16 +483,23 @@ export const useAduf = create<AdufState>((set, get) => ({
   },
   setMemoryGraph: (nodes, edges) => set({ memoryNodes: nodes, memoryEdges: edges }),
 
-  connectSource: (id) => {
-    set((s) => ({ sources: s.sources.map((d) => (d.id === id ? { ...d, connected: true } : d)) }));
-    const src = get().sources.find((x) => x.id === id);
-    if (!src) return;
-    void get().createInsight({
-      title: `${src.name} connected`,
-      body: `ADUF is now syncing data from ${src.name}.`,
-      severity: "success",
-      source: "Data",
-    });
+  setConnectorStatuses: (statuses) =>
+    set((s) => ({
+      connectorsLoaded: true,
+      connectorsConfigured: Object.fromEntries(
+        Object.entries(statuses).map(([id, v]) => [id, v.configured]),
+      ),
+      sources: s.sources.map((d) => {
+        const status = statuses[d.id];
+        return status ? { ...d, connected: status.connected } : d;
+      }),
+    })),
+
+  setAnalytics: (analytics) => set({ analytics }),
+
+  setBusinessData: (data) => {
+    const { series, deals, topCustomers, channelRevenue, funnel, ...businessMeta } = data;
+    set({ series, deals, topCustomers, channelRevenue, funnel, businessMeta });
   },
 
   setSourceConnected: (id, connected) =>
@@ -441,9 +520,9 @@ export const useAduf = create<AdufState>((set, get) => ({
     set({ sessionId: fresh, messages: [] });
   },
 
-  sendMessage: (text) => {
+  sendMessage: (text, attachment) => {
     const trimmed = text.trim();
-    if (!trimmed || get().thinking) return;
+    if ((!trimmed && !attachment) || get().thinking) return;
 
     // Any attempt to prompt the AI — including the suggestion chips and
     // "answer a question" replies, which both funnel through here — is
@@ -453,7 +532,15 @@ export const useAduf = create<AdufState>((set, get) => ({
 
     const history = get().messages;
     set((s) => ({
-      messages: [...s.messages, { id: `u-${Date.now()}`, role: "user", text: trimmed }],
+      messages: [
+        ...s.messages,
+        {
+          id: `u-${Date.now()}`,
+          role: "user",
+          text: trimmed,
+          ...(attachment ? { attachments: [attachment] } : {}),
+        },
+      ],
       thinking: true,
     }));
 
@@ -467,6 +554,7 @@ export const useAduf = create<AdufState>((set, get) => ({
         history,
         sessionId: get().sessionId,
         accessToken,
+        ...(attachment ? { attachment } : {}),
       }),
     })
       .then(async (res) => {
@@ -482,6 +570,8 @@ export const useAduf = create<AdufState>((set, get) => ({
           attachments?: ChatMessage["attachments"];
           analysis?: ChatMessage["analysis"] | null;
           proposedAction?: ChatMessage["proposedAction"] | null;
+          sources?: ChatMessage["sources"];
+          dataGaps?: ChatMessage["dataGaps"];
         };
       })
       .then((data) => {
@@ -499,6 +589,8 @@ export const useAduf = create<AdufState>((set, get) => ({
               ...(data.proposedAction
                 ? { proposedAction: data.proposedAction, proposedActionStatus: "pending" as const }
                 : {}),
+              ...(data.sources ? { sources: data.sources } : {}),
+              ...(data.dataGaps?.length ? { dataGaps: data.dataGaps } : {}),
             },
           ],
           thinking: false,
@@ -548,7 +640,9 @@ export const useAduf = create<AdufState>((set, get) => ({
 
   createInsight: async (input) => {
     try {
-      const insight = await createInsightFn({ data: input });
+      const insight = await createInsightFn({
+        data: { accessToken: useAuth.getState().accessToken, ...input },
+      });
       if (insight) get().upsertInsight(insight);
     } catch (err) {
       console.error("[insights] createInsight failed", err);
@@ -562,7 +656,7 @@ export const useAduf = create<AdufState>((set, get) => ({
     set((s) => ({
       insights: s.insights.map((i) => (i.id === id ? { ...i, read: true } : i)),
     }));
-    markInsightReadFn({ data: { id } })
+    markInsightReadFn({ data: { accessToken: useAuth.getState().accessToken, id } })
       .then((updated) => {
         if (updated) get().upsertInsight(updated);
       })
@@ -575,7 +669,7 @@ export const useAduf = create<AdufState>((set, get) => ({
   markAllInsightsRead: () => {
     const before = get().insights;
     set((s) => ({ insights: s.insights.map((i) => ({ ...i, read: true })) }));
-    markAllInsightsReadFn()
+    markAllInsightsReadFn({ data: { accessToken: useAuth.getState().accessToken } })
       .then(({ ok }) => {
         if (!ok) set({ insights: before });
       })
@@ -590,7 +684,7 @@ export const useAduf = create<AdufState>((set, get) => ({
     // the server. If the delete fails, put it back.
     const removed = get().insights.find((i) => i.id === id) ?? null;
     get().removeInsight(id);
-    dismissInsightFn({ data: { id } })
+    dismissInsightFn({ data: { accessToken: useAuth.getState().accessToken, id } })
       .then(({ ok }) => {
         if (!ok && removed) get().upsertInsight(removed);
       })
@@ -599,58 +693,6 @@ export const useAduf = create<AdufState>((set, get) => ({
         if (removed) get().upsertInsight(removed);
       });
   },
-
-  approveProposedAction: (messageId) => {
-    const message = get().messages.find((m) => m.id === messageId);
-    const action = message?.proposedAction;
-    if (!action || message?.proposedActionStatus !== "pending") return;
-
-    set((s) => ({
-      messages: s.messages.map((m) =>
-        m.id === messageId ? { ...m, proposedActionStatus: "approved" as const } : m,
-      ),
-    }));
-
-    if (action.type === "create_goal") {
-      // Same call the "New Goal" form makes — persists to Supabase and the
-      // Goals page picks it up via the realtime subscription in
-      // GoalsBootstrap, with no extra plumbing needed here.
-      get().addGoal(action.title, action.target);
-    } else if (action.type === "toggle_automation") {
-      const current = get().automations.find((a) => a.id === action.channelId);
-      if (current && current.enabled !== action.enabled) {
-        get().toggleAutomation(action.channelId);
-      }
-    } else if (action.type === "create_automation") {
-      // Inserts a real, brand-new automation — this is the path that was
-      // entirely missing before: the agent could only toggle one of the 6
-      // built-in channels, never create something new. The Grid page picks
-      // it up automatically via its realtime subscription.
-      get().createAutomation({
-        name: action.name,
-        trigger: action.trigger,
-        action: action.action,
-        goalTitle: action.goalTitle,
-      });
-    } else if (action.type === "deploy_n8n_workflow") {
-      // Builds + deploys the real n8n workflow — ALWAYS inactive (Safe
-      // Mode). This only creates it; a separate explicit "Turn it on" tap
-      // (activateN8nDeployment) is required before it can run for real.
-      get().deployN8nWorkflow({
-        name: action.name,
-        reasoning: action.reasoning,
-        templateId: action.templateId,
-        buildBrief: action.buildBrief,
-      });
-    }
-  },
-
-  dismissProposedAction: (messageId) =>
-    set((s) => ({
-      messages: s.messages.map((m) =>
-        m.id === messageId ? { ...m, proposedActionStatus: "dismissed" as const } : m,
-      ),
-    })),
 
   setScheduleEvents: (events) => set({ scheduleEvents: events }),
 
@@ -668,7 +710,7 @@ export const useAduf = create<AdufState>((set, get) => ({
     set((s) => ({ scheduleEvents: s.scheduleEvents.filter((e) => e.id !== id) })),
 
   addScheduleEvent: (event) => {
-    createScheduleEventFn({ data: event })
+    createScheduleEventFn({ data: { accessToken: useAuth.getState().accessToken, ...event } })
       .then((created) => {
         if (!created) return;
         get().upsertScheduleEvent(created);
@@ -687,7 +729,7 @@ export const useAduf = create<AdufState>((set, get) => ({
     // flip it back (realtime will also reconcile harmlessly either way).
     const before = get().scheduleEvents.find((e) => e.id === id);
     if (before) get().upsertScheduleEvent({ ...before, done: !before.done });
-    toggleScheduleEventDoneFn({ data: { id } })
+    toggleScheduleEventDoneFn({ data: { accessToken: useAuth.getState().accessToken, id } })
       .then((updated) => {
         if (updated) get().upsertScheduleEvent(updated);
         else if (before) get().upsertScheduleEvent(before);
@@ -704,7 +746,9 @@ export const useAduf = create<AdufState>((set, get) => ({
     const removed = get().scheduleEvents.find((e) => e.id === id) ?? null;
     get().removeScheduleEvent(id);
     try {
-      const { ok } = await deleteScheduleEventFn({ data: { id } });
+      const { ok } = await deleteScheduleEventFn({
+        data: { accessToken: useAuth.getState().accessToken, id },
+      });
       if (!ok && removed) get().upsertScheduleEvent(removed);
     } catch {
       if (removed) get().upsertScheduleEvent(removed);

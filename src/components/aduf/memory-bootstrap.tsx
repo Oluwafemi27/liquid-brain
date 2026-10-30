@@ -1,61 +1,60 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import { fetchMemoryGraphFn } from "@/lib/server-fns";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { useAduf } from "@/store/aduf-store";
+import { useAuth } from "@/store/auth-store";
 
-// Every table that feeds a Business Memory cluster (see lib/server/memory.ts).
-// A change to any of these means the globe's counts are stale.
-const WATCHED_TABLES = ["chat_messages", "agent_documents", "goals", "automation_runs"] as const;
+// Tables that feed a Business Memory cluster (see lib/server/memory.ts) and
+// carry a user_id, so realtime can be filtered to the signed-in user.
+// (agent_documents has no user_id and isn't in the realtime publication — the
+// focus/interval refresh below is what keeps that cluster current.)
+const WATCHED_TABLES = ["chat_messages", "goals", "automation_runs"] as const;
 
-/** Mounted once in AppShell. Loads the Business Memory graph from Supabase
- *  on first render, then keeps it live: any real change ADUF records — a
- *  new chat message, an uploaded document, a goal, an automation run —
- *  triggers a lightweight recount, so the globe updates within moments
- *  without a page reload, exactly like Goals and Automations already do.
- *  Renders nothing. */
+/** Mounted once in AppShell. Loads this user's Business Memory graph from
+ *  Supabase, then keeps it live: any real change ADUF records — a chat
+ *  message, a goal, an automation run — triggers a lightweight recount over
+ *  Realtime, and a focus/interval refresh covers everything else. Renders
+ *  nothing. */
 export function MemoryBootstrap() {
   const setMemoryGraph = useAduf((s) => s.setMemoryGraph);
+  const { user, accessToken } = useAuth();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const refresh = useCallback(() => {
+    fetchMemoryGraphFn({ data: { accessToken } })
+      .then((graph) => {
+        if (graph) setMemoryGraph(graph.nodes, graph.edges);
+      })
+      .catch((err) => console.error("[memory] graph refresh failed", err));
+  }, [accessToken, setMemoryGraph]);
+
+  useLiveRefresh(refresh, 60_000, Boolean(user && accessToken));
+
   useEffect(() => {
-    let cancelled = false;
-
-    function refresh() {
-      fetchMemoryGraphFn()
-        .then(({ nodes, edges }) => {
-          if (!cancelled) setMemoryGraph(nodes, edges);
-        })
-        .catch(() => {
-          // No backend configured yet — the globe stays core-only.
-        });
-    }
-
-    refresh();
-
     const client = getSupabaseBrowser();
-    if (!client) {
-      return () => {
-        cancelled = true;
-      };
-    }
+    if (!client || !user) return;
 
-    function scheduleRefresh() {
+    const schedule = () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(refresh, 500);
-    }
+    };
 
-    const channel = client.channel("memory-graph-realtime");
+    const channel = client.channel(`memory-graph-realtime-${user.id}`);
     for (const table of WATCHED_TABLES) {
-      channel.on("postgres_changes", { event: "*", schema: "public", table }, scheduleRefresh);
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table, filter: `user_id=eq.${user.id}` },
+        schedule,
+      );
     }
     channel.subscribe();
 
     return () => {
-      cancelled = true;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       client.removeChannel(channel);
     };
-  }, [setMemoryGraph]);
+  }, [user, refresh]);
 
   return null;
 }

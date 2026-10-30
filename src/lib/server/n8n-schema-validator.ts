@@ -34,9 +34,13 @@ export interface WorkflowValidationIssue {
  *  first filter, not a replacement for testDeployWorkflow() — n8n's own
  *  create-workflow endpoint remains the source of truth since parameter
  *  shapes go deeper than this index tracks. */
-export function validateWorkflowAgainstSchema(workflowJson: Record<string, unknown>): WorkflowValidationIssue[] {
+export function validateWorkflowAgainstSchema(
+  workflowJson: Record<string, unknown>,
+): WorkflowValidationIssue[] {
   const issues: WorkflowValidationIssue[] = [];
-  const nodes = Array.isArray(workflowJson["nodes"]) ? (workflowJson["nodes"] as Record<string, unknown>[]) : [];
+  const nodes = Array.isArray(workflowJson["nodes"])
+    ? (workflowJson["nodes"] as Record<string, unknown>[])
+    : [];
 
   for (const node of nodes) {
     const type = typeof node["type"] === "string" ? (node["type"] as string) : "";
@@ -69,7 +73,11 @@ export function validateWorkflowAgainstSchema(workflowJson: Record<string, unkno
       });
     }
     const operation = params["operation"];
-    if (schema.operations && typeof operation === "string" && !schema.operations.includes(operation)) {
+    if (
+      schema.operations &&
+      typeof operation === "string" &&
+      !schema.operations.includes(operation)
+    ) {
       issues.push({
         nodeName: name,
         nodeType: type,

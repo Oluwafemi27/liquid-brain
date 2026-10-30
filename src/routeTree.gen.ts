@@ -25,6 +25,7 @@ import { Route as ApiModelKeysRouteImport } from './routes/api/model-keys'
 import { Route as ApiN8nConnectionRouteImport } from './routes/api/n8n-connection'
 import { Route as ApiSkillsRouteImport } from './routes/api/skills'
 import { Route as ApiConnectorsTelegramRouteImport } from './routes/api/connectors/telegram'
+import { Route as ApiCronDailyRouteImport } from './routes/api/cron/daily'
 import { Route as ApiDocumentsConvertRouteImport } from './routes/api/documents/convert'
 import { Route as ApiDocumentsUploadRouteImport } from './routes/api/documents/upload'
 import { Route as ApiSandboxRunRouteImport } from './routes/api/sandbox/run'
@@ -32,6 +33,7 @@ import { Route as ApiSkillsReplyRouteImport } from './routes/api/skills/reply'
 import { Route as ApiTasksRunRouteImport } from './routes/api/tasks/run'
 import { Route as ApiConnectorsProviderAuthorizeRouteImport } from './routes/api/connectors/$provider/authorize'
 import { Route as ApiConnectorsProviderCallbackRouteImport } from './routes/api/connectors/$provider/callback'
+import { Route as ApiConnectorsProviderManageRouteImport } from './routes/api/connectors/$provider/manage'
 import { Route as ApiConnectorsTelegramWebhookRouteImport } from './routes/api/connectors/telegram/webhook'
 import { Route as ApiDocumentsIdDownloadRouteImport } from './routes/api/documents/$id/download'
 import { Route as ApiDocumentsIdPreviewRouteImport } from './routes/api/documents/$id/preview'
@@ -116,6 +118,11 @@ const ApiConnectorsTelegramRoute = ApiConnectorsTelegramRouteImport.update({
   path: '/api/connectors/telegram',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCronDailyRoute = ApiCronDailyRouteImport.update({
+  id: '/api/cron/daily',
+  path: '/api/cron/daily',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDocumentsConvertRoute = ApiDocumentsConvertRouteImport.update({
   id: '/convert',
   path: '/convert',
@@ -153,6 +160,12 @@ const ApiConnectorsProviderCallbackRoute =
     path: '/api/connectors/$provider/callback',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiConnectorsProviderManageRoute =
+  ApiConnectorsProviderManageRouteImport.update({
+    id: '/api/connectors/$provider/manage',
+    path: '/api/connectors/$provider/manage',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiConnectorsTelegramWebhookRoute =
   ApiConnectorsTelegramWebhookRouteImport.update({
     id: '/webhook',
@@ -187,6 +200,7 @@ export interface FileRoutesByFullPath {
   '/api/n8n-connection': typeof ApiN8nConnectionRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/connectors/telegram': typeof ApiConnectorsTelegramRouteWithChildren
+  '/api/cron/daily': typeof ApiCronDailyRoute
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/upload': typeof ApiDocumentsUploadRoute
   '/api/sandbox/run': typeof ApiSandboxRunRoute
@@ -194,6 +208,7 @@ export interface FileRoutesByFullPath {
   '/api/tasks/run': typeof ApiTasksRunRoute
   '/api/connectors/$provider/authorize': typeof ApiConnectorsProviderAuthorizeRoute
   '/api/connectors/$provider/callback': typeof ApiConnectorsProviderCallbackRoute
+  '/api/connectors/$provider/manage': typeof ApiConnectorsProviderManageRoute
   '/api/connectors/telegram/webhook': typeof ApiConnectorsTelegramWebhookRoute
   '/api/documents/$id/download': typeof ApiDocumentsIdDownloadRoute
   '/api/documents/$id/preview': typeof ApiDocumentsIdPreviewRoute
@@ -215,6 +230,7 @@ export interface FileRoutesByTo {
   '/api/n8n-connection': typeof ApiN8nConnectionRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/connectors/telegram': typeof ApiConnectorsTelegramRouteWithChildren
+  '/api/cron/daily': typeof ApiCronDailyRoute
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/upload': typeof ApiDocumentsUploadRoute
   '/api/sandbox/run': typeof ApiSandboxRunRoute
@@ -222,6 +238,7 @@ export interface FileRoutesByTo {
   '/api/tasks/run': typeof ApiTasksRunRoute
   '/api/connectors/$provider/authorize': typeof ApiConnectorsProviderAuthorizeRoute
   '/api/connectors/$provider/callback': typeof ApiConnectorsProviderCallbackRoute
+  '/api/connectors/$provider/manage': typeof ApiConnectorsProviderManageRoute
   '/api/connectors/telegram/webhook': typeof ApiConnectorsTelegramWebhookRoute
   '/api/documents/$id/download': typeof ApiDocumentsIdDownloadRoute
   '/api/documents/$id/preview': typeof ApiDocumentsIdPreviewRoute
@@ -244,6 +261,7 @@ export interface FileRoutesById {
   '/api/n8n-connection': typeof ApiN8nConnectionRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/connectors/telegram': typeof ApiConnectorsTelegramRouteWithChildren
+  '/api/cron/daily': typeof ApiCronDailyRoute
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/upload': typeof ApiDocumentsUploadRoute
   '/api/sandbox/run': typeof ApiSandboxRunRoute
@@ -251,6 +269,7 @@ export interface FileRoutesById {
   '/api/tasks/run': typeof ApiTasksRunRoute
   '/api/connectors/$provider/authorize': typeof ApiConnectorsProviderAuthorizeRoute
   '/api/connectors/$provider/callback': typeof ApiConnectorsProviderCallbackRoute
+  '/api/connectors/$provider/manage': typeof ApiConnectorsProviderManageRoute
   '/api/connectors/telegram/webhook': typeof ApiConnectorsTelegramWebhookRoute
   '/api/documents/$id/download': typeof ApiDocumentsIdDownloadRoute
   '/api/documents/$id/preview': typeof ApiDocumentsIdPreviewRoute
@@ -274,6 +293,7 @@ export interface FileRouteTypes {
     | '/api/n8n-connection'
     | '/api/skills'
     | '/api/connectors/telegram'
+    | '/api/cron/daily'
     | '/api/documents/convert'
     | '/api/documents/upload'
     | '/api/sandbox/run'
@@ -281,6 +301,7 @@ export interface FileRouteTypes {
     | '/api/tasks/run'
     | '/api/connectors/$provider/authorize'
     | '/api/connectors/$provider/callback'
+    | '/api/connectors/$provider/manage'
     | '/api/connectors/telegram/webhook'
     | '/api/documents/$id/download'
     | '/api/documents/$id/preview'
@@ -302,6 +323,7 @@ export interface FileRouteTypes {
     | '/api/n8n-connection'
     | '/api/skills'
     | '/api/connectors/telegram'
+    | '/api/cron/daily'
     | '/api/documents/convert'
     | '/api/documents/upload'
     | '/api/sandbox/run'
@@ -309,6 +331,7 @@ export interface FileRouteTypes {
     | '/api/tasks/run'
     | '/api/connectors/$provider/authorize'
     | '/api/connectors/$provider/callback'
+    | '/api/connectors/$provider/manage'
     | '/api/connectors/telegram/webhook'
     | '/api/documents/$id/download'
     | '/api/documents/$id/preview'
@@ -330,6 +353,7 @@ export interface FileRouteTypes {
     | '/api/n8n-connection'
     | '/api/skills'
     | '/api/connectors/telegram'
+    | '/api/cron/daily'
     | '/api/documents/convert'
     | '/api/documents/upload'
     | '/api/sandbox/run'
@@ -337,6 +361,7 @@ export interface FileRouteTypes {
     | '/api/tasks/run'
     | '/api/connectors/$provider/authorize'
     | '/api/connectors/$provider/callback'
+    | '/api/connectors/$provider/manage'
     | '/api/connectors/telegram/webhook'
     | '/api/documents/$id/download'
     | '/api/documents/$id/preview'
@@ -359,10 +384,12 @@ export interface RootRouteChildren {
   ApiN8nConnectionRoute: typeof ApiN8nConnectionRoute
   ApiSkillsRoute: typeof ApiSkillsRouteWithChildren
   ApiConnectorsTelegramRoute: typeof ApiConnectorsTelegramRouteWithChildren
+  ApiCronDailyRoute: typeof ApiCronDailyRoute
   ApiSandboxRunRoute: typeof ApiSandboxRunRoute
   ApiTasksRunRoute: typeof ApiTasksRunRoute
   ApiConnectorsProviderAuthorizeRoute: typeof ApiConnectorsProviderAuthorizeRoute
   ApiConnectorsProviderCallbackRoute: typeof ApiConnectorsProviderCallbackRoute
+  ApiConnectorsProviderManageRoute: typeof ApiConnectorsProviderManageRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -479,6 +506,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiConnectorsTelegramRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cron/daily': {
+      id: '/api/cron/daily'
+      path: '/api/cron/daily'
+      fullPath: '/api/cron/daily'
+      preLoaderRoute: typeof ApiCronDailyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/documents/convert': {
       id: '/api/documents/convert'
       path: '/convert'
@@ -526,6 +560,13 @@ declare module '@tanstack/react-router' {
       path: '/api/connectors/$provider/callback'
       fullPath: '/api/connectors/$provider/callback'
       preLoaderRoute: typeof ApiConnectorsProviderCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/connectors/$provider/manage': {
+      id: '/api/connectors/$provider/manage'
+      path: '/api/connectors/$provider/manage'
+      fullPath: '/api/connectors/$provider/manage'
+      preLoaderRoute: typeof ApiConnectorsProviderManageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/connectors/telegram/webhook': {
@@ -612,10 +653,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiN8nConnectionRoute: ApiN8nConnectionRoute,
   ApiSkillsRoute: ApiSkillsRouteWithChildren,
   ApiConnectorsTelegramRoute: ApiConnectorsTelegramRouteWithChildren,
+  ApiCronDailyRoute: ApiCronDailyRoute,
   ApiSandboxRunRoute: ApiSandboxRunRoute,
   ApiTasksRunRoute: ApiTasksRunRoute,
   ApiConnectorsProviderAuthorizeRoute: ApiConnectorsProviderAuthorizeRoute,
   ApiConnectorsProviderCallbackRoute: ApiConnectorsProviderCallbackRoute,
+  ApiConnectorsProviderManageRoute: ApiConnectorsProviderManageRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

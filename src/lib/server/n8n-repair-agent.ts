@@ -139,7 +139,10 @@ export async function runWeeklyRepairSweep(options?: { batchSize?: number }): Pr
  *  connection being down — files the same kind of correction as the
  *  weekly sweep, but immediately, so a broken template is starred the
  *  moment it's discovered rather than waiting up to a week. */
-export async function flagTemplateFromDeployFailure(templateId: string, error: string): Promise<void> {
+export async function flagTemplateFromDeployFailure(
+  templateId: string,
+  error: string,
+): Promise<void> {
   await starTemplateCorrection({
     templateId,
     issue: error,

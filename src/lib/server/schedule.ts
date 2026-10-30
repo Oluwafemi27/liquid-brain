@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 import type { ScheduleCategory, ScheduleEvent, Weekday } from "@/lib/aduf-types";
-import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin } from "./supabase";
 
 interface ScheduleEventRow {
   id: string;
@@ -28,17 +28,17 @@ function fromRow(row: ScheduleEventRow): ScheduleEvent {
   };
 }
 
-/** Every event for the workspace. Returns [] if no backend is configured —
- *  the app runs fine without persistence, the week just won't survive a
- *  reload. */
-export async function listScheduleEvents(): Promise<ScheduleEvent[]> {
+/** Every event belonging to this user. Returns [] if no backend is
+ *  configured — the app runs fine without persistence, the week just
+ *  won't survive a reload. */
+export async function listScheduleEvents(userId: string): Promise<ScheduleEvent[]> {
   const db = getSupabaseAdmin();
   if (!db) return [];
 
   const { data, error } = await db
     .from("schedule_events")
     .select(SELECT_COLUMNS)
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .order("created_at", { ascending: true });
   if (error) {
     console.error("[schedule] failed to list schedule events", error);
@@ -47,21 +47,24 @@ export async function listScheduleEvents(): Promise<ScheduleEvent[]> {
   return (data ?? []).map(fromRow);
 }
 
-export async function createScheduleEvent(input: {
-  title: string;
-  day: Weekday;
-  startTime: string;
-  endTime: string;
-  category: ScheduleCategory;
-  notes: string;
-}): Promise<ScheduleEvent | null> {
+export async function createScheduleEvent(
+  userId: string,
+  input: {
+    title: string;
+    day: Weekday;
+    startTime: string;
+    endTime: string;
+    category: ScheduleCategory;
+    notes: string;
+  },
+): Promise<ScheduleEvent | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
 
   const { data, error } = await db
     .from("schedule_events")
     .insert({
-      workspace_id: DEFAULT_WORKSPACE_ID,
+      user_id: userId,
       title: input.title,
       day: input.day,
       start_time: input.startTime,
@@ -78,14 +81,17 @@ export async function createScheduleEvent(input: {
   return fromRow(data);
 }
 
-export async function toggleScheduleEventDone(id: string): Promise<ScheduleEvent | null> {
+export async function toggleScheduleEventDone(
+  userId: string,
+  id: string,
+): Promise<ScheduleEvent | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
 
   const { data: existing, error: readError } = await db
     .from("schedule_events")
     .select("done")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .eq("id", id)
     .single();
   if (readError || !existing) {
@@ -96,7 +102,7 @@ export async function toggleScheduleEventDone(id: string): Promise<ScheduleEvent
   const { data, error } = await db
     .from("schedule_events")
     .update({ done: !existing["done"], updated_at: new Date().toISOString() })
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("user_id", userId)
     .eq("id", id)
     .select(SELECT_COLUMNS)
     .single();
@@ -107,15 +113,11 @@ export async function toggleScheduleEventDone(id: string): Promise<ScheduleEvent
   return fromRow(data);
 }
 
-export async function deleteScheduleEvent(id: string): Promise<boolean> {
+export async function deleteScheduleEvent(userId: string, id: string): Promise<boolean> {
   const db = getSupabaseAdmin();
   if (!db) return false;
 
-  const { error } = await db
-    .from("schedule_events")
-    .delete()
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
-    .eq("id", id);
+  const { error } = await db.from("schedule_events").delete().eq("user_id", userId).eq("id", id);
   if (error) {
     console.error("[schedule] failed to delete schedule event", error);
     return false;

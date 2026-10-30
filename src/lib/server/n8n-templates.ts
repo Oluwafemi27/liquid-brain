@@ -60,7 +60,9 @@ export async function searchN8nTemplates(query: string, limit = 8): Promise<N8nT
     .in("template_id", ids)
     .eq("starred", true)
     .eq("status", "open");
-  const correctionByTemplate = new Map((corrections ?? []).map((c) => [c["template_id"] as string, c]));
+  const correctionByTemplate = new Map(
+    (corrections ?? []).map((c) => [c["template_id"] as string, c]),
+  );
 
   return rows.map((row) => {
     const correction = correctionByTemplate.get(row["id"] as string);
@@ -88,9 +90,11 @@ export async function searchN8nTemplates(query: string, limit = 8): Promise<N8nT
 /** The exact workflow JSON to deploy for a given template id — the
  *  corrected version if a starred fix is on file, otherwise the original
  *  import. Callers should never read workflow_json directly. */
-export async function getDeployableTemplateJson(
-  templateId: string,
-): Promise<{ workflowJson: Record<string, unknown>; name: string; usedCorrection: boolean } | null> {
+export async function getDeployableTemplateJson(templateId: string): Promise<{
+  workflowJson: Record<string, unknown>;
+  name: string;
+  usedCorrection: boolean;
+} | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
 

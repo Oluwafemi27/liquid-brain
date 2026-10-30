@@ -14,12 +14,31 @@ export interface ConnectorStatus {
  *  (if a backend is configured) with which providers have OAuth app
  *  credentials set at all. Never throws — callers always get a full map. */
 export async function getConnectorStatuses(): Promise<Record<string, ConnectorStatus>> {
-  const ids = ["shopify", "ga", "telegram", "paystack", "meta", "sheets"];
+  const ids = [
+    "shopify",
+    "ga",
+    "telegram",
+    "paystack",
+    "meta",
+    "sheets",
+    "drive",
+    "gmail",
+    "instagram",
+    "tiktok",
+    "discord",
+    "aliexpress",
+    "alibaba",
+    "semrush",
+    "jumia",
+  ];
   const base: Record<string, ConnectorStatus> = {};
   for (const id of ids) {
     const provider = getProvider(id);
+    // OAuth providers are "configured" once their app credentials are in env;
+    // pasted-credential providers (Semrush, Jumia, Paystack) are always ready.
     const configured = Boolean(
-      provider && isOAuth(provider) && provider.clientId && provider.clientSecret,
+      provider &&
+      (isOAuth(provider) ? provider.clientId && provider.clientSecret : "keyBased" in provider),
     );
     base[id] = { id, connected: false, configured };
   }

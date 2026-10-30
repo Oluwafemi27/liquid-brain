@@ -1,9 +1,7 @@
+.output/
+.wrangler/
 node_modules/
+
 .env
-.env.local
-dist/
-build/
-.tanstack/
-*.log
-.DS_Store
-tools/n8n-ingest/templates-14227.jsonl
+.env.*
+!.env.example

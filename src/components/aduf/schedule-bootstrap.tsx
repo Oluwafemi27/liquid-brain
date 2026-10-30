@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { fetchScheduleEventsFn } from "@/lib/server-fns";
 import { useAduf } from "@/store/aduf-store";
+import { useAuth } from "@/store/auth-store";
 import type { ScheduleCategory, Weekday } from "@/lib/aduf-types";
 
 /** Raw shape of a Supabase realtime row for `schedule_events`. */
@@ -23,10 +24,12 @@ interface ScheduleEventRealtimeRow {
  *  nothing. */
 export function ScheduleBootstrap() {
   const { setScheduleEvents, upsertScheduleEvent, removeScheduleEvent } = useAduf();
+  const { user, accessToken } = useAuth();
 
   useEffect(() => {
+    if (!user) return;
     let cancelled = false;
-    fetchScheduleEventsFn()
+    fetchScheduleEventsFn({ data: { accessToken } })
       .then((events) => {
         if (!cancelled) setScheduleEvents(events);
       })
@@ -36,17 +39,17 @@ export function ScheduleBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, [setScheduleEvents]);
+  }, [user, accessToken, setScheduleEvents]);
 
   useEffect(() => {
     const client = getSupabaseBrowser();
-    if (!client) return;
+    if (!client || !user) return;
 
     const channel = client
-      .channel("schedule-events-realtime")
+      .channel(`schedule-events-realtime-${user.id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "schedule_events" },
+        { event: "*", schema: "public", table: "schedule_events", filter: `user_id=eq.${user.id}` },
         (payload) => {
           if (payload.eventType === "DELETE") {
             const oldId = (payload.old as { id?: string })["id"];
@@ -71,7 +74,7 @@ export function ScheduleBootstrap() {
     return () => {
       client.removeChannel(channel);
     };
-  }, [upsertScheduleEvent, removeScheduleEvent]);
+  }, [user, upsertScheduleEvent, removeScheduleEvent]);
 
   return null;
 }
