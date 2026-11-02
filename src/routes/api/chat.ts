@@ -1,3 +1,9 @@
+import {
+  EntitlementError,
+  QuotaExceededError,
+  assertTokensAvailable,
+  withBilling,
+} from "@/lib/server/billing";
 import { proposeAction } from "@/lib/server/actions";
 import { buildFactsSheet } from "@/lib/server/verdict";
 import type { SourceRef } from "@/lib/aduf-types";
@@ -196,18 +202,23 @@ export const Route = createFileRoute("/api/chat")({
           : null;
 
         try {
-          const { result, trace } = await runWithHarness(
-            "brain-chat-reply",
-            (repairContext) =>
-              callAgent(
-                history as ChatMessage[],
-                messageForAgent,
-                repairContext,
-                surveyContext,
-                facts?.text,
-              ),
-            { maxAttempts: 3 },
-          );
+          const run = () =>
+            runWithHarness(
+              "brain-chat-reply",
+              (repairContext) =>
+                callAgent(
+                  history as ChatMessage[],
+                  messageForAgent,
+                  repairContext,
+                  surveyContext,
+                  facts?.text,
+                ),
+              { maxAttempts: 3 },
+            );
+          if (authedUser) await assertTokensAvailable(authedUser.id);
+          const { result, trace } = authedUser
+            ? await withBilling({ userId: authedUser.id, feature: "chat" }, run)
+            : await run();
           // Resolve [S#] citations to real sources; strip the markers from what the owner reads.
           const cited = new Set([...result.reply.matchAll(/\[S(\d+)\]/g)].map((m) => `S${m[1]}`));
           const sources = (facts?.sources ?? [])
@@ -267,6 +278,10 @@ export const Route = createFileRoute("/api/chat")({
             dataGaps,
           });
         } catch (error) {
+          if (error instanceof QuotaExceededError || error instanceof EntitlementError) {
+            void logMessage(userId, sessionId, "aduf", error.message);
+            return json({ reply: error.message, question: null, trace: [], paywall: true });
+          }
           if (error instanceof NoModelConfiguredError) {
             void logMessage(userId, sessionId, "aduf", error.message);
             return json({ reply: error.message, question: null, trace: [] });

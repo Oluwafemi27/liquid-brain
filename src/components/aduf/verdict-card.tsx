@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, RefreshCw } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type CSSProperties } from "react";
 import { ActionCard, ConfidenceBadge, SourcesRow } from "@/components/aduf/action-card";
 import { ActivityFeed } from "@/components/aduf/activity-feed";
+import { TokenChip } from "@/components/aduf/token-chip";
 import { GlassCard } from "@/components/aduf/liquid";
 import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import type { ActionRecord, DailyVerdict, VerdictStatus } from "@/lib/aduf-types";
@@ -12,11 +13,29 @@ import { fetchVerdictFn } from "@/lib/server-fns";
 import { useAduf } from "@/store/aduf-store";
 import { useAuth } from "@/store/auth-store";
 
-export const STATUS_STYLE: Record<VerdictStatus, { dot: string; ring: string; word: string }> = {
-  green: { dot: "bg-emerald-400", ring: "ring-emerald-400/40", word: "On track" },
-  amber: { dot: "bg-amber-400", ring: "ring-amber-400/40", word: "Needs a look" },
-  red: { dot: "bg-red-400", ring: "ring-red-400/40", word: "Needs you" },
-  unknown: { dot: "bg-zinc-400", ring: "ring-zinc-400/30", word: "Not enough data yet" },
+export const STATUS_STYLE: Record<
+  VerdictStatus,
+  { dot: string; border: string; rgb: string; word: string }
+> = {
+  green: {
+    dot: "bg-emerald-400",
+    border: "border-emerald-400/60",
+    rgb: "52 211 153",
+    word: "On track",
+  },
+  amber: {
+    dot: "bg-amber-400",
+    border: "border-amber-400/60",
+    rgb: "251 191 36",
+    word: "Needs a look",
+  },
+  red: { dot: "bg-red-400", border: "border-red-400/60", rgb: "248 113 113", word: "Needs you" },
+  unknown: {
+    dot: "bg-zinc-400",
+    border: "border-zinc-400/40",
+    rgb: "161 161 170",
+    word: "Not enough data yet",
+  },
 };
 
 /** The verdict itself — one plain sentence, one status — so it can also be shown as a static sample. */
@@ -29,26 +48,30 @@ export function VerdictView({
 }) {
   const st = STATUS_STYLE[verdict.status];
   return (
-    <div className="flex items-start gap-3.5">
-      <span
-        className={`mt-1 grid h-11 w-11 shrink-0 place-items-center rounded-full ring-4 ${st.ring}`}
-        role="img"
-        aria-label={`Status: ${st.word}`}
-      >
-        <span className={`h-4 w-4 rounded-full ${st.dot}`} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-          {sample ? "Example · " : "Today · "}
-          {st.word}
-        </p>
-        <h2 className="mt-1 text-lg font-semibold leading-snug sm:text-xl">{verdict.headline}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{verdict.subline}</p>
-        <p className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-          <ConfidenceBadge level={verdict.confidence} />
-          <span>{verdict.confidenceNote}</span>
-        </p>
+    <div>
+      <div className="flex items-center gap-3">
+        {/* The status light glows continuously (a still glow if the device asks for reduced motion). */}
+        <span
+          className={`verdict-orb grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 ${st.border}`}
+          style={{ "--orb": st.rgb } as CSSProperties}
+          role="img"
+          aria-label={`Status: ${st.word}`}
+        >
+          <span className={`verdict-orb-dot h-3 w-3 rounded-full ${st.dot}`} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            {sample ? "Example · " : "Today · "}
+            {st.word}
+          </p>
+          <h2 className="text-[15px] font-semibold leading-snug sm:text-lg">{verdict.headline}</h2>
+        </div>
       </div>
+      <p className="mt-1.5 text-xs text-muted-foreground">{verdict.subline}</p>
+      <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+        <ConfidenceBadge level={verdict.confidence} />
+        <span>{verdict.confidenceNote}</span>
+      </p>
     </div>
   );
 }
@@ -121,7 +144,7 @@ export function DailyVerdictCard() {
 
   const showCta = verdict.status === "unknown";
   return (
-    <GlassCard hover={false} className="mb-4 p-4 sm:p-5">
+    <GlassCard hover={false} className="mb-3 p-3.5 sm:p-5">
       <VerdictView verdict={verdict} />
 
       {showCta ? (
@@ -166,19 +189,19 @@ export function DailyVerdictCard() {
         </div>
       ) : null}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.07] px-3.5 py-1.5 text-xs hover:bg-white/12"
+          className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.07] px-3 py-1 text-[11px] hover:bg-white/12"
         >
           What I checked
           <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
         </button>
         <Link
           to="/analytics"
-          className="rounded-full px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+          className="rounded-full px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
         >
           See the numbers →
         </Link>

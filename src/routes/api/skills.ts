@@ -1,3 +1,4 @@
+import { requireAdmin, requireUser } from "@/lib/server/require-admin";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { listSkills, setSkillEnabled } from "@/lib/server/skills";
@@ -17,11 +18,15 @@ const patchSchema = z.object({
 export const Route = createFileRoute("/api/skills")({
   server: {
     handlers: {
-      GET: async () => {
+      GET: async ({ request }) => {
+        const auth = await requireUser(request);
+        if (!auth.ok) return auth.response;
         const skills = await listSkills();
         return json({ skills });
       },
       PATCH: async ({ request }) => {
+        const auth = await requireAdmin(request, "change skills");
+        if (!auth.ok) return auth.response;
         let raw: unknown;
         try {
           raw = await request.json();

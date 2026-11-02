@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AutomationsRouteImport } from './routes/automations'
+import { Route as BillingRouteImport } from './routes/billing'
 import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as NotificationsRouteImport } from './routes/notifications'
@@ -24,6 +25,7 @@ import { Route as ApiFxRouteImport } from './routes/api/fx'
 import { Route as ApiModelKeysRouteImport } from './routes/api/model-keys'
 import { Route as ApiN8nConnectionRouteImport } from './routes/api/n8n-connection'
 import { Route as ApiSkillsRouteImport } from './routes/api/skills'
+import { Route as ApiBillingPaystackWebhookRouteImport } from './routes/api/billing/paystack-webhook'
 import { Route as ApiConnectorsTelegramRouteImport } from './routes/api/connectors/telegram'
 import { Route as ApiCronDailyRouteImport } from './routes/api/cron/daily'
 import { Route as ApiDocumentsConvertRouteImport } from './routes/api/documents/convert'
@@ -56,6 +58,11 @@ const AnalyticsRoute = AnalyticsRouteImport.update({
 const AutomationsRoute = AutomationsRouteImport.update({
   id: '/automations',
   path: '/automations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BillingRoute = BillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GoalsRoute = GoalsRouteImport.update({
@@ -113,6 +120,12 @@ const ApiSkillsRoute = ApiSkillsRouteImport.update({
   path: '/api/skills',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBillingPaystackWebhookRoute =
+  ApiBillingPaystackWebhookRouteImport.update({
+    id: '/api/billing/paystack-webhook',
+    path: '/api/billing/paystack-webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiConnectorsTelegramRoute = ApiConnectorsTelegramRouteImport.update({
   id: '/api/connectors/telegram',
   path: '/api/connectors/telegram',
@@ -188,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/automations': typeof AutomationsRoute
+  '/billing': typeof BillingRoute
   '/goals': typeof GoalsRoute
   '/memory': typeof MemoryRoute
   '/notifications': typeof NotificationsRoute
@@ -199,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/api/model-keys': typeof ApiModelKeysRoute
   '/api/n8n-connection': typeof ApiN8nConnectionRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
+  '/api/billing/paystack-webhook': typeof ApiBillingPaystackWebhookRoute
   '/api/connectors/telegram': typeof ApiConnectorsTelegramRouteWithChildren
   '/api/cron/daily': typeof ApiCronDailyRoute
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
@@ -218,6 +233,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/automations': typeof AutomationsRoute
+  '/billing': typeof BillingRoute
   '/goals': typeof GoalsRoute
   '/memory': typeof MemoryRoute
   '/notifications': typeof NotificationsRoute
@@ -229,6 +245,7 @@ export interface FileRoutesByTo {
   '/api/model-keys': typeof ApiModelKeysRoute
   '/api/n8n-connection': typeof ApiN8nConnectionRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
+  '/api/billing/paystack-webhook': typeof ApiBillingPaystackWebhookRoute
   '/api/connectors/telegram': typeof ApiConnectorsTelegramRouteWithChildren
   '/api/cron/daily': typeof ApiCronDailyRoute
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
@@ -249,6 +266,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/automations': typeof AutomationsRoute
+  '/billing': typeof BillingRoute
   '/goals': typeof GoalsRoute
   '/memory': typeof MemoryRoute
   '/notifications': typeof NotificationsRoute
@@ -260,6 +278,7 @@ export interface FileRoutesById {
   '/api/model-keys': typeof ApiModelKeysRoute
   '/api/n8n-connection': typeof ApiN8nConnectionRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
+  '/api/billing/paystack-webhook': typeof ApiBillingPaystackWebhookRoute
   '/api/connectors/telegram': typeof ApiConnectorsTelegramRouteWithChildren
   '/api/cron/daily': typeof ApiCronDailyRoute
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
@@ -281,6 +300,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/automations'
+    | '/billing'
     | '/goals'
     | '/memory'
     | '/notifications'
@@ -292,6 +312,7 @@ export interface FileRouteTypes {
     | '/api/model-keys'
     | '/api/n8n-connection'
     | '/api/skills'
+    | '/api/billing/paystack-webhook'
     | '/api/connectors/telegram'
     | '/api/cron/daily'
     | '/api/documents/convert'
@@ -311,6 +332,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/automations'
+    | '/billing'
     | '/goals'
     | '/memory'
     | '/notifications'
@@ -322,6 +344,7 @@ export interface FileRouteTypes {
     | '/api/model-keys'
     | '/api/n8n-connection'
     | '/api/skills'
+    | '/api/billing/paystack-webhook'
     | '/api/connectors/telegram'
     | '/api/cron/daily'
     | '/api/documents/convert'
@@ -341,6 +364,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/automations'
+    | '/billing'
     | '/goals'
     | '/memory'
     | '/notifications'
@@ -352,6 +376,7 @@ export interface FileRouteTypes {
     | '/api/model-keys'
     | '/api/n8n-connection'
     | '/api/skills'
+    | '/api/billing/paystack-webhook'
     | '/api/connectors/telegram'
     | '/api/cron/daily'
     | '/api/documents/convert'
@@ -372,6 +397,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   AnalyticsRoute: typeof AnalyticsRoute
   AutomationsRoute: typeof AutomationsRoute
+  BillingRoute: typeof BillingRoute
   GoalsRoute: typeof GoalsRoute
   MemoryRoute: typeof MemoryRoute
   NotificationsRoute: typeof NotificationsRoute
@@ -383,6 +409,7 @@ export interface RootRouteChildren {
   ApiModelKeysRoute: typeof ApiModelKeysRoute
   ApiN8nConnectionRoute: typeof ApiN8nConnectionRoute
   ApiSkillsRoute: typeof ApiSkillsRouteWithChildren
+  ApiBillingPaystackWebhookRoute: typeof ApiBillingPaystackWebhookRoute
   ApiConnectorsTelegramRoute: typeof ApiConnectorsTelegramRouteWithChildren
   ApiCronDailyRoute: typeof ApiCronDailyRoute
   ApiSandboxRunRoute: typeof ApiSandboxRunRoute
@@ -420,6 +447,13 @@ declare module '@tanstack/react-router' {
       path: '/automations'
       fullPath: '/automations'
       preLoaderRoute: typeof AutomationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/billing': {
+      id: '/billing'
+      path: '/billing'
+      fullPath: '/billing'
+      preLoaderRoute: typeof BillingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/goals': {
@@ -497,6 +531,13 @@ declare module '@tanstack/react-router' {
       path: '/api/skills'
       fullPath: '/api/skills'
       preLoaderRoute: typeof ApiSkillsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/billing/paystack-webhook': {
+      id: '/api/billing/paystack-webhook'
+      path: '/api/billing/paystack-webhook'
+      fullPath: '/api/billing/paystack-webhook'
+      preLoaderRoute: typeof ApiBillingPaystackWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/connectors/telegram': {
@@ -641,6 +682,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   AnalyticsRoute: AnalyticsRoute,
   AutomationsRoute: AutomationsRoute,
+  BillingRoute: BillingRoute,
   GoalsRoute: GoalsRoute,
   MemoryRoute: MemoryRoute,
   NotificationsRoute: NotificationsRoute,
@@ -652,6 +694,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiModelKeysRoute: ApiModelKeysRoute,
   ApiN8nConnectionRoute: ApiN8nConnectionRoute,
   ApiSkillsRoute: ApiSkillsRouteWithChildren,
+  ApiBillingPaystackWebhookRoute: ApiBillingPaystackWebhookRoute,
   ApiConnectorsTelegramRoute: ApiConnectorsTelegramRouteWithChildren,
   ApiCronDailyRoute: ApiCronDailyRoute,
   ApiSandboxRunRoute: ApiSandboxRunRoute,

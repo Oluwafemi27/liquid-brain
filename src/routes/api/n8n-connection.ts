@@ -1,3 +1,4 @@
+import { requireAdmin, requireUser } from "@/lib/server/require-admin";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import {
@@ -26,11 +27,15 @@ const postSchema = z.object({
 export const Route = createFileRoute("/api/n8n-connection")({
   server: {
     handlers: {
-      GET: async () => {
+      GET: async ({ request }) => {
+        const auth = await requireUser(request);
+        if (!auth.ok) return auth.response;
         const status = await getN8nConnectionStatus();
         return json(status);
       },
       POST: async ({ request }) => {
+        const auth = await requireAdmin(request, "change the n8n connection");
+        if (!auth.ok) return auth.response;
         let raw: unknown;
         try {
           raw = await request.json();
@@ -49,7 +54,9 @@ export const Route = createFileRoute("/api/n8n-connection")({
         if (!result.ok) return json({ error: result.error }, 400);
         return json({ ok: true });
       },
-      DELETE: async () => {
+      DELETE: async ({ request }) => {
+        const auth = await requireAdmin(request, "change the n8n connection");
+        if (!auth.ok) return auth.response;
         try {
           await deleteN8nConnection();
           return json({ ok: true });

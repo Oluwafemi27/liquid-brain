@@ -40,6 +40,7 @@ import {
   loadGoogleTableFn,
   resyncImportFn,
 } from "@/lib/server-fns";
+import { PLATFORM_NAMES } from "@/lib/permissions-catalog";
 import { useAduf } from "@/store/aduf-store";
 import { useAuth } from "@/store/auth-store";
 
@@ -63,13 +64,10 @@ type Notice = { kind: "ok" | "error"; text: string; detail?: string[] } | null;
 const selectClass =
   "w-full rounded-xl border border-white/10 bg-white/6 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
-const SOURCE_LABEL: Record<ImportSummary["source"], string> = {
-  csv: "File upload",
-  sheets: "Google Sheets",
-  drive: "Google Drive",
-  ga: "Google Analytics",
-  gmail: "Gmail",
-};
+const SOURCE_LABEL: Record<ImportSummary["source"], string> = new Proxy(
+  {} as Record<string, string>,
+  { get: (_t, k: string) => (k === "csv" ? "File upload" : (PLATFORM_NAMES[k] ?? k)) },
+);
 
 const KIND_NOUN: Record<ImportSummary["kind"], string> = {
   sale: "sales",

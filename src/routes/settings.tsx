@@ -1,3 +1,5 @@
+import { ConnectorHub } from "@/components/aduf/connector-hub";
+import { PlanSummaryCard } from "@/components/aduf/plan-summary";
 import { DataPrivacyPanel } from "@/components/aduf/data-privacy-panel";
 import { IntegrationAccess } from "@/components/aduf/integration-access";
 import { SafetyPanel } from "@/components/aduf/safety-panel";
@@ -277,69 +279,20 @@ function SettingsPage() {
               ) : null}
             </div>
 
-            <div>
-              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <Blocks className="h-4 w-4" /> Integrations
-              </h2>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {sources.map((s, i) => (
-                  <GlassCard
-                    key={s.id}
-                    delay={i * 0.05}
-                    className="relative min-h-16 rounded-2xl p-4"
-                  >
-                    <AnimatePresence>
-                      {pouring === s.id ? (
-                        <motion.div
-                          initial={{ height: 0 }}
-                          animate={{ height: "100%" }}
-                          exit={{ opacity: 0 }}
-                          transition={{ duration: 1.1, ease: [0.2, 0.8, 0.2, 1] }}
-                          className="water-surface pointer-events-none absolute inset-x-0 bottom-0"
-                        />
-                      ) : null}
-                    </AnimatePresence>
-                    <div className="relative">
-                      <p className="text-xl font-semibold">{s.name}</p>
-                      <p className="mt-0.5 text-sm text-gray-400">{s.category}</p>
-                      <button
-                        onClick={() => !s.connected && connect(s.id)}
-                        disabled={s.connected || pouring === s.id}
-                        className="mt-4 w-full rounded-full px-4 py-2 text-xs font-medium"
-                        style={
-                          s.connected
-                            ? { border: "1px solid var(--border)" }
-                            : {
-                                background: "var(--gradient-accent)",
-                                color: "var(--background)",
-                              }
-                        }
-                      >
-                        {s.connected ? "Connected" : pouring === s.id ? "Pouring…" : "Connect"}
-                      </button>
-                      <IntegrationAccess
-                        id={s.id}
-                        connected={s.connected}
-                        health={healthById[s.id]}
-                      />
-                      {s.connected && s.id !== "telegram" && isAdmin ? (
-                        <button
-                          type="button"
-                          onClick={() => void disconnect(s.id)}
-                          className="mt-2 w-full text-center text-[11px] text-muted-foreground hover:text-red-400"
-                        >
-                          Disconnect
-                        </button>
-                      ) : null}
-                    </div>
-                  </GlassCard>
-                ))}
-              </div>
-            </div>
+            <ConnectorHub
+              sources={sources}
+              configured={configured}
+              health={healthById}
+              isAdmin={isAdmin}
+              pouringId={pouring}
+              onConnect={connect}
+              onDisconnect={(id) => void disconnect(id)}
+            />
 
+            <PlanSummaryCard />
             <SafetyPanel />
-            <ModelKeysPanel />
-            <SkillsPanel />
+            {isAdmin ? <ModelKeysPanel /> : null}
+            {isAdmin ? <SkillsPanel /> : null}
             <DataPrivacyPanel />
           </div>
         </div>

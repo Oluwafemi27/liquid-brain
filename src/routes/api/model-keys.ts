@@ -1,3 +1,4 @@
+import { requireAdmin, requireUser } from "@/lib/server/require-admin";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import {
@@ -29,11 +30,15 @@ const deleteSchema = z.object({
 export const Route = createFileRoute("/api/model-keys")({
   server: {
     handlers: {
-      GET: async () => {
+      GET: async ({ request }) => {
+        const auth = await requireUser(request);
+        if (!auth.ok) return auth.response;
         const statuses = await listModelKeyStatuses();
         return json({ providers: statuses });
       },
       POST: async ({ request }) => {
+        const auth = await requireAdmin(request, "change the AI model keys");
+        if (!auth.ok) return auth.response;
         let raw: unknown;
         try {
           raw = await request.json();
@@ -58,6 +63,8 @@ export const Route = createFileRoute("/api/model-keys")({
         }
       },
       DELETE: async ({ request }) => {
+        const auth = await requireAdmin(request, "change the AI model keys");
+        if (!auth.ok) return auth.response;
         let raw: unknown;
         try {
           raw = await request.json();
@@ -76,6 +83,8 @@ export const Route = createFileRoute("/api/model-keys")({
         }
       },
       PATCH: async ({ request }) => {
+        const auth = await requireAdmin(request, "change the AI model keys");
+        if (!auth.ok) return auth.response;
         let raw: unknown;
         try {
           raw = await request.json();

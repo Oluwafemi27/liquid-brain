@@ -418,7 +418,11 @@ export function normalizeStage(raw: string | undefined): DealStageName | null {
   if (/\b(won|closed won|paid|complete|signed|success|delivered|purchased)/.test(s)) return "Won";
   if (/(negotiat|proposal|quote|quoted|offer|contract|pricing|decision|verbal)/.test(s))
     return "Negotiation";
-  if (/(contact|qualif|follow|repl|demo|meeting|discovery|call|engaged|interest)/.test(s))
+  if (
+    /(contact|qualif|follow|repl|demo|meeting|discovery|call|engaged|interest|appointment|schedul|booked)/.test(
+      s,
+    )
+  )
     return "Contacted";
   return "New";
 }
@@ -437,6 +441,8 @@ export interface ParsedRecord {
   owner: string | null;
   segment: string | null;
   orders: number | null;
+  /** Set by platform importers when a source mixes currencies; otherwise the import's currency applies. */
+  currency?: string | undefined;
 }
 
 export interface SkippedRow {

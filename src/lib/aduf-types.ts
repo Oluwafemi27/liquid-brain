@@ -384,7 +384,18 @@ export interface AnalyticsSummary {
 
 // ---- Business data import (sales / leads / customers / deals / traffic) ----
 
-export type ImportSource = "csv" | "sheets" | "drive" | "ga" | "gmail";
+export type ImportSource =
+  | "csv"
+  | "sheets"
+  | "drive"
+  | "ga"
+  | "gmail"
+  | "paystack"
+  | "stripe"
+  | "flutterwave"
+  | "woocommerce"
+  | "hubspot"
+  | "pipedrive";
 export type ImportRecordKind = "sale" | "lead" | "customer" | "deal" | "traffic";
 
 /** One completed import, as listed under "Imported data" on Analytics. */

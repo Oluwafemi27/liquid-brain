@@ -1,5 +1,40 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { getSupabaseAdmin } from "@/lib/server/supabase";
+import {
+  QuotaExceededError,
+  EntitlementError,
+  getBillingSettings,
+  getEntitlements,
+  listPacks,
+  listPlans,
+  usageByFeature,
+} from "@/lib/server/billing";
+import {
+  BillingError,
+  adminBillingOverview,
+  adminGrantPlan,
+  adminGrantTokens,
+  cancelSubscription,
+  listPayments,
+  resumeSubscription,
+  startCheckout,
+  syncPaystackPlans,
+  updateBillingSettings,
+  updatePack,
+  updatePlan,
+  verifyByReference,
+} from "@/lib/server/checkout";
+import { PaystackError, paystackConfigured } from "@/lib/server/paystack";
+import {
+  PromoError,
+  createPromoCodes,
+  listPromoCodes,
+  previewPromo,
+  redeemGrantPromo,
+  setPromoActive,
+} from "@/lib/server/promos";
+import { asAdmin } from "@/lib/server/admin-trust";
 import { MAX_IMPORT_ROWS, type Mapping } from "@/lib/import-mapping";
 import {
   deleteImport,
@@ -28,7 +63,8 @@ import { sendDigest } from "@/lib/server/alerts";
 import { checkConnections } from "@/lib/server/connection-health";
 import { deleteUserData, type DeletionScope } from "@/lib/server/data-deletion";
 import { ImportError } from "@/lib/server/google-auth";
-import { resyncImport } from "@/lib/server/import-sync";
+import { importFromConnector, resyncImport } from "@/lib/server/import-sync";
+import { logEvent } from "@/lib/server/activity";
 import { emailConfigured } from "@/lib/server/notify";
 import { getOwnerSettings, saveOwnerSettings } from "@/lib/server/owner-settings";
 import { getPlatformAnalytics } from "@/lib/server/platform-analytics";
@@ -363,24 +399,6 @@ export const searchN8nTemplatesFn = createServerFn({ method: "POST" })
 /** Deploys a workflow to the owner's n8n — always inactive (Safe Mode).
  *  Called both from the chat approval flow (deploy_n8n_workflow
  *  proposedAction) and from a manual "Deploy from library" action. */
-export const deployN8nWorkflowFn = createServerFn({ method: "POST" })
-  .validator(
-    (data: {
-      accessToken: string | null;
-      name: string;
-      reasoning: string;
-      automationId?: string | undefined;
-      templateId?: string | undefined;
-      buildBrief?: string | undefined;
-    }) => data,
-  )
-  .handler(async ({ data }) => {
-    const user = await verifyAccessToken(data.accessToken);
-    if (!user) throw new Error("Not signed in.");
-    const { accessToken: _accessToken, ...input } = data;
-    return createSafeModeDeployment(user.id, input);
-  });
-
 /** The only path that turns a workflow on — always an explicit, separate
  *  owner action after "I built it. Want me to turn it on?". */
 export const activateN8nDeploymentFn = createServerFn({ method: "POST" })
@@ -880,3 +898,389 @@ export const adminRemoveUserFn = createServerFn({ method: "POST" })
 export const adminSecurityChecksFn = createServerFn({ method: "POST" })
   .validator((data: { accessToken: string | null }) => data)
   .handler(async ({ data }) => adminSecurityChecks(data.accessToken));
+
+// ---------------------------------------------------------------------------
+// Plans, tokens, payments (Paystack) and promo codes.
+// ---------------------------------------------------------------------------
+
+const tokenOnly = z.object({ accessToken: z.string().nullable() });
+async function signedIn(accessToken: string | null) {
+  const user = await verifyAccessToken(accessToken);
+  if (!user) throw new BillingError(NOT_SIGNED_IN);
+  return user;
+}
+async function adminOnly(accessToken: string | null) {
+  const ctx = await asAdmin(accessToken);
+  if (!ctx) throw new BillingError("Admins only.");
+  return ctx;
+}
+
+/** Public: what the landing page shows. No sign-in needed; no secrets in it. */
+export const fetchPublicPlansFn = createServerFn({ method: "POST" })
+  .validator(() => ({}))
+  .handler(async () => {
+    try {
+      return { plans: await listPlans(), packs: await listPacks() };
+    } catch {
+      return null; // the landing page falls back to its built-in defaults
+    }
+  });
+
+export const fetchBillingFn = createServerFn({ method: "POST" })
+  .validator((data: z.infer<typeof tokenOnly>) => tokenOnly.parse(data))
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      const user = await signedIn(data.accessToken);
+      const [entitlements, plans, packs, payments, usage] = await Promise.all([
+        getEntitlements(user.id),
+        listPlans(),
+        listPacks(),
+        listPayments(user.id),
+        usageByFeature(user.id),
+      ]);
+      return { entitlements, plans, packs, payments, usage, paymentsReady: paystackConfigured() };
+    }),
+  );
+
+const checkoutSchema = z.object({
+  accessToken: z.string().nullable(),
+  planId: z.string().max(40).optional(),
+  packId: z.string().max(40).optional(),
+  interval: z.enum(["month", "year"]).optional(),
+  promoCode: z.string().max(60).optional(),
+  autoRenew: z.boolean().optional(),
+  origin: z.string().max(200).optional(),
+});
+export const startCheckoutFn = createServerFn({ method: "POST" })
+  .validator((data: z.infer<typeof checkoutSchema>) => checkoutSchema.parse(data))
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      const user = await signedIn(data.accessToken);
+      const { accessToken: _t, ...input } = data;
+      return await startCheckout({ id: user.id, email: user.email ?? null }, input);
+    }),
+  );
+
+export const verifyPaymentFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null; reference: string }) =>
+    z
+      .object({ accessToken: z.string().nullable(), reference: z.string().min(6).max(80) })
+      .parse(data),
+  )
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      const user = await signedIn(data.accessToken);
+      return await verifyByReference(user.id, data.reference);
+    }),
+  );
+
+/** One box for every kind of code: grants apply now, discounts are returned to be used at checkout. */
+export const applyPromoFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null; code: string }) =>
+    z.object({ accessToken: z.string().nullable(), code: z.string().min(1).max(60) }).parse(data),
+  )
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      const user = await signedIn(data.accessToken);
+      const preview = await previewPromo(user.id, data.code);
+      if (preview.kind === "percent_off")
+        return {
+          mode: "discount" as const,
+          preview,
+          message: `${preview.description} — it'll be applied when you check out.`,
+        };
+      const done = await redeemGrantPromo(user.id, data.code);
+      return { mode: "granted" as const, preview, message: done.message };
+    }),
+  );
+
+export const cancelSubscriptionFn = createServerFn({ method: "POST" })
+  .validator((data: z.infer<typeof tokenOnly>) => tokenOnly.parse(data))
+  .handler(async ({ data }) =>
+    guarded(async () => ({
+      message: await cancelSubscription((await signedIn(data.accessToken)).id),
+    })),
+  );
+export const resumeSubscriptionFn = createServerFn({ method: "POST" })
+  .validator((data: z.infer<typeof tokenOnly>) => tokenOnly.parse(data))
+  .handler(async ({ data }) =>
+    guarded(async () => ({
+      message: await resumeSubscription((await signedIn(data.accessToken)).id),
+    })),
+  );
+
+// ---- admin ----
+
+export const adminBillingFn = createServerFn({ method: "POST" })
+  .validator((data: z.infer<typeof tokenOnly>) => tokenOnly.parse(data))
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      await adminOnly(data.accessToken);
+      const [overview, plans, packs, promos, settings] = await Promise.all([
+        adminBillingOverview(),
+        listPlans({ includeInactive: true }),
+        listPacks({ includeInactive: true }),
+        listPromoCodes(),
+        getBillingSettings(),
+      ]);
+      return { overview, plans, packs, promos, settings, paymentsReady: paystackConfigured() };
+    }),
+  );
+
+export const adminUpdatePlanFn = createServerFn({ method: "POST" })
+  .validator(
+    (data: { accessToken: string | null; id: string; patch: Record<string, unknown> }) => data,
+  )
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      await adminOnly(data.accessToken);
+      try {
+        await updatePlan(data.id, data.patch);
+      } catch (e) {
+        if (e instanceof z.ZodError)
+          throw new BillingError(e.issues[0]?.message ?? "Invalid value");
+        throw e;
+      }
+      return {};
+    }),
+  );
+
+export const adminSyncPaystackPlanFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null; id: string }) => data)
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      await adminOnly(data.accessToken);
+      return { message: await syncPaystackPlans(data.id) };
+    }),
+  );
+
+export const adminUpdatePackFn = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      accessToken: string | null;
+      id: string;
+      patch: {
+        name?: string;
+        tokens?: number;
+        priceNgn?: number;
+        priceUsd?: number;
+        active?: boolean;
+      };
+    }) => data,
+  )
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      await adminOnly(data.accessToken);
+      await updatePack(data.id, data.patch);
+      return {};
+    }),
+  );
+
+export const adminBillingSettingsFn = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      accessToken: string | null;
+      patch: { trialEnabled?: boolean; trialDays?: number; trialPlan?: string };
+    }) => data,
+  )
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      await adminOnly(data.accessToken);
+      await updateBillingSettings(data.patch);
+      return {};
+    }),
+  );
+
+const promoCreateSchema = z.object({
+  accessToken: z.string().nullable(),
+  kind: z.enum(["percent_off", "free_plan", "bonus_tokens"]),
+  percent: z.number().int().min(1).max(100).optional(),
+  planId: z.string().max(40).optional(),
+  durationDays: z.number().int().min(1).max(3650).optional(),
+  tokens: z.number().int().min(1).max(10_000_000_000).optional(),
+  appliesTo: z.enum(["any", "subscription", "topup"]).optional(),
+  maxRedemptions: z.number().int().min(1).max(1_000_000).optional(),
+  expiresAt: z.string().max(40).optional(),
+  note: z.string().max(200).optional(),
+  prefix: z.string().max(12).optional(),
+  customCode: z.string().max(40).optional(),
+  quantity: z.number().int().min(1).max(200).optional(),
+});
+/** ONLY admins can generate promo codes — verified server-side on every call. */
+export const adminCreatePromoFn = createServerFn({ method: "POST" })
+  .validator((data: z.infer<typeof promoCreateSchema>) => promoCreateSchema.parse(data))
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      const ctx = await adminOnly(data.accessToken);
+      const { accessToken: _t, ...input } = data;
+      return { codes: await createPromoCodes(ctx.user.id, input) };
+    }),
+  );
+
+export const adminSetPromoActiveFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null; id: string; active: boolean }) =>
+    z
+      .object({ accessToken: z.string().nullable(), id: z.string().uuid(), active: z.boolean() })
+      .parse(data),
+  )
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      await adminOnly(data.accessToken);
+      await setPromoActive(data.id, data.active);
+      return {};
+    }),
+  );
+
+export const adminGrantPlanFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null; userId: string; planId: string; days: number }) =>
+    z
+      .object({
+        accessToken: z.string().nullable(),
+        userId: z.string().uuid(),
+        planId: z.string().max(40),
+        days: z.number().int().min(1).max(3650),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      await adminOnly(data.accessToken);
+      await adminGrantPlan(data.userId, data.planId, data.days);
+      return {};
+    }),
+  );
+
+export const adminGrantTokensFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null; userId: string; tokens: number; note: string }) =>
+    z
+      .object({
+        accessToken: z.string().nullable(),
+        userId: z.string().uuid(),
+        tokens: z.number().int().min(1).max(10_000_000_000),
+        note: z.string().max(120),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      await adminOnly(data.accessToken);
+      await adminGrantTokens(data.userId, data.tokens, data.note);
+      return {};
+    }),
+  );
+
+/** "Import now" on a connected platform (Paystack, Stripe, Flutterwave, WooCommerce, HubSpot, Pipedrive). */
+export const importFromConnectorFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null; connectorId: string }) =>
+    z
+      .object({
+        accessToken: z.string().nullable(),
+        connectorId: z.enum([
+          "paystack",
+          "stripe",
+          "flutterwave",
+          "woocommerce",
+          "hubspot",
+          "pipedrive",
+        ]),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      const user = await verifyAccessToken(data.accessToken);
+      if (!user) throw new ImportError(NOT_SIGNED_IN, "reauth");
+      const imported = await importFromConnector(user.id, data.connectorId);
+      await logEvent(user.id, {
+        platform: data.connectorId,
+        kind: "import",
+        title: `Imported ${imported.toLocaleString()} records`,
+        status: "ok",
+      });
+      return { imported };
+    }),
+  );
+
+// ---- Connector hub helpers ----
+
+/** The owner's own survey answers, used only to suggest where to start. */
+export const fetchBusinessProfileFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return { profile: "" };
+    const s = await getSurvey(user.id);
+    return { profile: s ? `${s.businessType} ${s.profession} ${s.goal}` : "" };
+  });
+
+export const requestConnectorFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null; name: string; note?: string }) =>
+    z
+      .object({
+        accessToken: z.string().nullable(),
+        name: z.string().trim().min(2).max(60),
+        note: z.string().max(300).optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      const user = await verifyAccessToken(data.accessToken);
+      if (!user) throw new ImportError(NOT_SIGNED_IN, "reauth");
+      const db = getSupabaseAdmin();
+      if (!db) throw new ImportError("The backend isn't configured.", "no_backend");
+      // Keep it from becoming a spam channel: 5 requests a day per person.
+      const since = new Date(Date.now() - 86_400_000).toISOString();
+      const { count } = await db
+        .from("connector_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("created_at", since);
+      if ((count ?? 0) >= 5)
+        throw new ImportError(
+          "You've sent a few requests today already — thanks! Try again tomorrow.",
+          "bad_data",
+        );
+      const { error } = await db
+        .from("connector_requests")
+        .insert({ user_id: user.id, name: data.name, note: data.note ?? "" });
+      if (error) throw new ImportError("Couldn't send that request. Try again.", "api");
+      return {};
+    }),
+  );
+
+export const adminConnectorRequestsFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const ctx = await asAdmin(data.accessToken);
+    if (!ctx) return null;
+    const { data: rows } = await ctx.db
+      .from("connector_requests")
+      .select("name, note, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    // Count how many times each platform was asked for — that's the build-next list.
+    const tally = new Map<string, { name: string; count: number; last: string; notes: string[] }>();
+    for (const r of rows ?? []) {
+      const key = String(r["name"]).trim().toLowerCase();
+      const t = tally.get(key) ?? {
+        name: String(r["name"]).trim(),
+        count: 0,
+        last: r["created_at"] as string,
+        notes: [],
+      };
+      t.count += 1;
+      if (r["note"] && t.notes.length < 3) t.notes.push(String(r["note"]));
+      tally.set(key, t);
+    }
+    return [...tally.values()].sort((a, b) => b.count - a.count);
+  });
+
+/** Light version of fetchBillingFn for chips and summaries: just the plan and token balance. */
+export const fetchWalletFn = createServerFn({ method: "POST" })
+  .validator((data: z.infer<typeof tokenOnly>) => tokenOnly.parse(data))
+  .handler(async ({ data }) =>
+    guarded(async () => ({
+      entitlements: await getEntitlements((await signedIn(data.accessToken)).id),
+    })),
+  );

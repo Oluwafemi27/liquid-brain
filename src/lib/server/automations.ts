@@ -1,3 +1,4 @@
+import { requireRoom } from "./billing";
 import "@tanstack/react-start/server-only";
 import type { Automation, AutomationRun, AutomationStep, ChannelId } from "@/lib/aduf-types";
 import { getSupabaseAdmin } from "./supabase";
@@ -206,6 +207,15 @@ export async function createAutomation(
 ): Promise<Automation | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
+
+  // Plan cap: only custom automations count, not the six built-in channel switches.
+  const { data: existing } = await db.from("automations").select("id").eq("user_id", userId);
+  const builtIn = new Set(["website", "whatsapp", "crm", "payments", "ads", "email"]);
+  await requireRoom(
+    userId,
+    "automations",
+    (existing ?? []).filter((a) => !builtIn.has(a["id"] as string)).length,
+  );
 
   let goalId: string | null = null;
   let goalLabel = "";

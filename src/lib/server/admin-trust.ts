@@ -9,7 +9,7 @@ import { verifyAccessToken } from "./survey";
 
 type Row = Record<string, unknown>;
 
-async function asAdmin(accessToken: string | null) {
+export async function asAdmin(accessToken: string | null) {
   const user = accessToken ? await verifyAccessToken(accessToken) : null;
   if (!user || !(await isAdminEmail(user.email))) return null;
   const db = getSupabaseAdmin();

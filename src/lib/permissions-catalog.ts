@@ -1,3 +1,5 @@
+import { CONNECTORS } from "./connector-registry";
+
 // Client-safe, plain-language description of exactly what each integration lets
 // ADUF read and change. Keep in step with the scopes in lib/server/oauth-providers.ts
 // (the test in tools/check-permissions.mjs fails the build if they drift).
@@ -153,23 +155,215 @@ export const INTEGRATION_ACCESS: Record<string, IntegrationAccess> = {
   },
 };
 
-/** Display names, so server and client agree. */
+const verifyOnly =
+  "Nothing yet — ADUF only checks that this connection works. Data import for it isn't built.";
+const full = (what: string) =>
+  `This credential can ${what}. ADUF has no code that does so, and only reads.`;
+const mk = (
+  id: string,
+  reads: string[],
+  changes: string[],
+  never: string[],
+  revoke: string,
+  scopes: string[] = [],
+): IntegrationAccess => ({ id, reads, changes, never, revoke, scopes });
+
+Object.assign(INTEGRATION_ACCESS, {
+  gsc: mk(
+    "gsc",
+    ["How people find you on Google Search: queries, pages, clicks and impressions"],
+    [],
+    ["Change your Search Console settings"],
+    "myaccount.google.com → Security → Third-party access",
+    ["https://www.googleapis.com/auth/webmasters.readonly"],
+  ),
+  gcal: mk(
+    "gcal",
+    ["Your calendar events (titles and times)"],
+    [],
+    ["Create, edit or delete events"],
+    "myaccount.google.com → Security → Third-party access",
+    ["https://www.googleapis.com/auth/calendar.readonly"],
+  ),
+  youtube: mk(
+    "youtube",
+    ["Your channel, videos and their view/watch statistics"],
+    [],
+    ["Upload, edit or delete videos"],
+    "myaccount.google.com → Security → Third-party access",
+    [
+      "https://www.googleapis.com/auth/youtube.readonly",
+      "https://www.googleapis.com/auth/yt-analytics.readonly",
+    ],
+  ),
+  stripe: mk(
+    "stripe",
+    ["Your paid charges (amount, date, customer name/email) — imported as sales"],
+    [],
+    ["Charge, refund or pay out. Use a restricted READ-ONLY key so it can't even if misused."],
+    "Stripe Dashboard → Developers → API keys → roll or delete the key",
+  ),
+  flutterwave: mk(
+    "flutterwave",
+    ["Your successful transactions — imported as sales"],
+    [full("move money, because Flutterwave secret keys have full access")],
+    ["Charge, refund or transfer"],
+    "Flutterwave Dashboard → Settings → API Keys → regenerate",
+  ),
+  paypal: mk(
+    "paypal",
+    [verifyOnly],
+    [full("act on your PayPal account within the app's permissions")],
+    ["Send or refund payments"],
+    "PayPal Developer → Apps → delete the app or reset its secret",
+  ),
+  square: mk(
+    "square",
+    [verifyOnly],
+    [full("act on your Square account within the token's permissions")],
+    ["Take payments or refund"],
+    "Square Developer Dashboard → revoke the access token",
+  ),
+  woocommerce: mk(
+    "woocommerce",
+    [
+      "Your completed and processing orders (amount, date, customer name/email) — imported as sales",
+    ],
+    [],
+    ["Change orders, products or prices (use a Read-only key)"],
+    "WooCommerce → Settings → Advanced → REST API → Revoke key",
+  ),
+  bigcommerce: mk(
+    "bigcommerce",
+    [verifyOnly],
+    [],
+    ["Change products or orders (use read-only scopes)"],
+    "BigCommerce → Settings → API → delete the account",
+  ),
+  wordpress: mk(
+    "wordpress",
+    [verifyOnly],
+    [full("act as that WordPress user — use a low-privilege user")],
+    ["Publish or edit content"],
+    "WordPress → Users → Profile → revoke the application password",
+  ),
+  webflow: mk(
+    "webflow",
+    [verifyOnly],
+    [],
+    ["Publish or edit your site (use a read-only token)"],
+    "Webflow → Site settings → API access → revoke",
+  ),
+  hubspot: mk(
+    "hubspot",
+    ["Your contacts (imported as leads) and deals (imported to your pipeline)"],
+    [],
+    ["Create, edit or delete CRM records (give the private app read scopes only)"],
+    "HubSpot → Settings → Private Apps → delete or rotate the token",
+  ),
+  pipedrive: mk(
+    "pipedrive",
+    ["Your deals (title, value, stage, owner) — imported to your pipeline"],
+    [full("do anything you can do in Pipedrive, because personal tokens aren't scoped")],
+    ["Create, edit or delete deals"],
+    "Pipedrive → Personal preferences → API → generate a new token",
+  ),
+  mailchimp: mk(
+    "mailchimp",
+    [verifyOnly],
+    [full("manage your audiences and send campaigns, because Mailchimp keys aren't scoped")],
+    ["Send campaigns"],
+    "Mailchimp → Account → Extras → API keys → disable",
+  ),
+  sendgrid: mk(
+    "sendgrid",
+    [verifyOnly],
+    [],
+    ["Send email (use a restricted key)"],
+    "SendGrid → Settings → API Keys → delete",
+  ),
+  brevo: mk(
+    "brevo",
+    [verifyOnly],
+    [full("manage contacts and send email/SMS, because Brevo keys aren't scoped")],
+    ["Send campaigns"],
+    "Brevo → SMTP & API → delete the key",
+  ),
+  klaviyo: mk(
+    "klaviyo",
+    [verifyOnly],
+    [],
+    ["Send campaigns (use a read-only private key)"],
+    "Klaviyo → Settings → API keys → revoke",
+  ),
+  whatsapp: mk(
+    "whatsapp",
+    [verifyOnly],
+    [full("send WhatsApp messages from your business number")],
+    ["Send any message — ADUF doesn't send through WhatsApp today"],
+    "Meta Business Suite → System users → revoke the token",
+  ),
+  twilio: mk(
+    "twilio",
+    [verifyOnly],
+    [full("send messages, make calls and spend your Twilio balance")],
+    ["Send messages or calls"],
+    "Twilio Console → Account → Auth tokens → rotate",
+  ),
+  termii: mk(
+    "termii",
+    [verifyOnly],
+    [full("send SMS and spend your Termii balance")],
+    ["Send messages"],
+    "Termii Dashboard → API → regenerate the key",
+  ),
+  africastalking: mk(
+    "africastalking",
+    [verifyOnly],
+    [full("send SMS and spend your balance")],
+    ["Send messages"],
+    "Africa's Talking → Settings → API Key → regenerate",
+  ),
+  slack: mk(
+    "slack",
+    [verifyOnly],
+    ["Whatever the bot's scopes allow (post messages, read channels it's in)"],
+    ["Post anything — ADUF doesn't post to Slack today"],
+    "api.slack.com/apps → your app → uninstall",
+  ),
+  airtable: mk(
+    "airtable",
+    [verifyOnly],
+    [],
+    ["Edit records (grant read scopes only)"],
+    "airtable.com/create/tokens → delete the token",
+  ),
+  notion: mk(
+    "notion",
+    [verifyOnly],
+    [],
+    ["Edit pages (the integration only sees pages you share with it)"],
+    "notion.so/my-integrations → delete the integration",
+  ),
+  typeform: mk(
+    "typeform",
+    [verifyOnly],
+    [],
+    ["Edit forms (use read-only scopes)"],
+    "Typeform → Account → Personal tokens → delete",
+  ),
+  calendly: mk(
+    "calendly",
+    [verifyOnly],
+    [],
+    ["Create or cancel bookings"],
+    "Calendly → Integrations → API & Webhooks → revoke the token",
+  ),
+});
+
+/** Display names, so server and client agree (derived from the connector registry). */
 export const PLATFORM_NAMES: Record<string, string> = {
-  ga: "Google Analytics",
-  sheets: "Google Sheets",
-  drive: "Google Drive",
-  gmail: "Gmail",
-  shopify: "Shopify",
-  meta: "Meta Ads",
-  instagram: "Instagram",
-  tiktok: "TikTok",
-  discord: "Discord",
-  aliexpress: "AliExpress",
-  alibaba: "Alibaba",
-  telegram: "Telegram",
-  paystack: "Paystack",
-  semrush: "Semrush",
-  jumia: "Jumia",
+  ...Object.fromEntries(CONNECTORS.map((c) => [c.id, c.name])),
   csv: "File uploads",
   aduf: "ADUF",
 };

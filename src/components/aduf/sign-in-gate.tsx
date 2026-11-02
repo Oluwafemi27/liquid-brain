@@ -1,3 +1,4 @@
+import { PricingSection } from "./pricing-section";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -466,6 +467,7 @@ export function SignInGate({ loading: _loading }: { loading: boolean }) {
 
       <SampleMorning />
       <SafeByDesign />
+      <PricingSection onStart={handleGoogleClick} />
 
       {/* Benefits */}
       <section className="mx-auto max-w-[1200px] px-4 py-10 sm:px-6 sm:py-14">

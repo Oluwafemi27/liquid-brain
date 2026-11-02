@@ -30,7 +30,6 @@ import {
   createScheduleEventFn,
   deleteGoalFn,
   deleteScheduleEventFn,
-  deployN8nWorkflowFn,
   dismissInsightFn,
   fetchChatHistoryFn,
   fetchN8nDeployments as fetchN8nDeploymentsFn,
@@ -130,13 +129,6 @@ interface AdufState {
   /** Deploys a workflow (from a template, or freshly built) to the owner's
    *  own n8n — ALWAYS created inactive. Used both by the chat approval flow
    *  (deploy_n8n_workflow proposedAction) and a manual "deploy" action. */
-  deployN8nWorkflow: (input: {
-    name: string;
-    reasoning: string;
-    automationId?: string | undefined;
-    templateId?: string | undefined;
-    buildBrief?: string | undefined;
-  }) => void;
   /** The only path that turns a deployment on — always an explicit tap on
    *  "Turn it on", never automatic. */
   activateN8nDeployment: (deploymentId: string) => void;
@@ -322,25 +314,6 @@ export const useAduf = create<AdufState>((set, get) => ({
     fetchN8nDeploymentsFn({ data: { accessToken: useAuth.getState().accessToken } })
       .then((deployments) => set({ n8nDeployments: deployments }))
       .catch((err) => console.error("[n8n] fetchN8nDeployments failed", err));
-  },
-
-  deployN8nWorkflow: (input) => {
-    deployN8nWorkflowFn({ data: { accessToken: useAuth.getState().accessToken, ...input } })
-      .then((deployment) => {
-        get().upsertN8nDeployment(deployment);
-        const built = deployment.status === "error";
-        void get().createInsight({
-          title: built
-            ? `Couldn't deploy "${deployment.name}"`
-            : `Built "${deployment.name}" on your n8n — it's off`,
-          body: built
-            ? (deployment.lastError ?? "n8n rejected the deploy.")
-            : `Safe Mode: ADUF deployed this to your n8n instance turned off. Review it, then turn it on when you're ready.`,
-          severity: built ? "warning" : "success",
-          source: "n8n",
-        });
-      })
-      .catch((err) => console.error("[n8n] deployN8nWorkflow failed", err));
   },
 
   activateN8nDeployment: (deploymentId) => {

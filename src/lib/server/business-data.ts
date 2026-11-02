@@ -1,3 +1,4 @@
+import { requireRoom } from "./billing";
 import "@tanstack/react-start/server-only";
 import type {
   BusinessData,
@@ -102,6 +103,27 @@ async function replaceImport(userId: string, meta: ImportMeta, rowsCount: number
   if (!/^[A-Z]{3}$/.test(meta.currency)) {
     throw new ImportError(`Unsupported currency “${meta.currency}”.`, "bad_data");
   }
+  const { data: already } = await db
+    .from("data_imports")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("source_ref", meta.sourceRef)
+    .eq("kind", meta.kind)
+    .maybeSingle();
+  if (!already) {
+    const { count } = await db
+      .from("data_imports")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId);
+    try {
+      await requireRoom(userId, "dataSources", count ?? 0);
+    } catch (e) {
+      throw new ImportError(
+        e instanceof Error ? e.message : "Your plan's data-source limit is reached.",
+        "bad_data",
+      );
+    }
+  }
   await db
     .from("data_imports")
     .delete()
@@ -204,7 +226,7 @@ export async function importTable(
       kind: args.kind,
       occurred_on: r.occurredOn,
       amount: r.amount,
-      currency: args.currency,
+      currency: r.currency ?? args.currency,
       name: r.name,
       company: r.company,
       email: r.email,
@@ -682,4 +704,68 @@ export function computeBusinessData(input: {
 
   out.generatedAt = now.toISOString();
   return out;
+}
+
+/** Saves records a platform importer already mapped (no spreadsheet columns involved). */
+export async function importParsedRecords(
+  userId: string,
+  args: {
+    source: ImportSource;
+    sourceRef: string;
+    label: string;
+    kind: ImportKind;
+    currency: string;
+    records: ParsedRecord[];
+    config?: Record<string, unknown> | null;
+    note?: string;
+  },
+): Promise<ImportOutcome> {
+  if (args.records.length === 0) {
+    throw new ImportError(
+      `${args.label} has nothing to import yet (no matching records in the last 12 months).`,
+      "bad_data",
+    );
+  }
+  const importId = await replaceImport(
+    userId,
+    {
+      source: args.source,
+      kind: args.kind,
+      label: args.label,
+      sourceRef: args.sourceRef,
+      currency: args.currency,
+      note: args.note ?? "",
+      config: args.config ?? null,
+    },
+    args.records.length,
+  );
+  await insertChunks(
+    "business_records",
+    args.records.map((r) => ({
+      import_id: importId,
+      user_id: userId,
+      kind: args.kind,
+      occurred_on: r.occurredOn,
+      amount: r.amount,
+      currency: r.currency ?? args.currency,
+      name: r.name,
+      company: r.company,
+      email: r.email,
+      channel: r.channel,
+      stage: r.stage,
+      probability: r.probability,
+      owner: r.owner,
+      segment: r.segment,
+      orders: r.orders,
+    })),
+    importId,
+    userId,
+  );
+  return {
+    importId,
+    imported: args.records.length,
+    skipped: 0,
+    skippedSample: [],
+    note: args.note ?? "",
+  };
 }

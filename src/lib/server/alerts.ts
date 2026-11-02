@@ -1,3 +1,4 @@
+import { requireFeature } from "./billing";
 import "@tanstack/react-start/server-only";
 import type { DailyVerdict, VerdictItem } from "@/lib/aduf-types";
 import { logEvent } from "./activity";
@@ -77,7 +78,11 @@ export async function runAlertCycle(
   }
 
   let pushed = false;
-  if (opts.push && fresh.length > 0 && !isQuietNow(settings, now)) {
+  const canPush = await requireFeature(userId, "digest").then(
+    () => true,
+    () => false,
+  );
+  if (opts.push && canPush && fresh.length > 0 && !isQuietNow(settings, now)) {
     const text = [
       "ADUF alert",
       ...fresh.map(
@@ -90,6 +95,14 @@ export async function runAlertCycle(
 }
 
 export async function sendDigest(userId: string): Promise<DeliveryResult> {
+  try {
+    await requireFeature(userId, "digest");
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Daily summaries aren't in your plan.",
+    };
+  }
   const settings = await getOwnerSettings(userId);
   const verdict = computeVerdict(await loadVerdictInput(userId));
   const res = await deliver(

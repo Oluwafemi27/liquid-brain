@@ -1,6 +1,14 @@
 import "@tanstack/react-start/server-only";
 import { logEvent } from "./activity";
-import { importGaMonths, importGmailLeads, importTable } from "./business-data";
+import type { ImportSource } from "@/lib/aduf-types";
+import {
+  importGaMonths,
+  importGmailLeads,
+  importParsedRecords,
+  importTable,
+} from "./business-data";
+import { IMPORTABLE_CONNECTORS, fetchConnectorBatches } from "./connector-importers";
+import { resolveConnectorSecret } from "./connector-keys";
 import { ImportError } from "./google-auth";
 import { fetchGaMonths, fetchGmailLeads, loadGoogleTable } from "./google-sources";
 import { getSupabaseAdmin } from "./supabase";
@@ -64,6 +72,8 @@ export async function resyncImport(userId: string, importId: string): Promise<Sy
           config,
         })
       ).imported;
+    } else if ((IMPORTABLE_CONNECTORS as readonly string[]).includes(source)) {
+      count = await importFromConnector(userId, source);
     } else if (source === "gmail") {
       count = (await importGmailLeads(userId, await fetchGmailLeads())).imported;
     } else {
@@ -112,4 +122,32 @@ export async function resyncDue(limit = 10): Promise<{ attempted: number; failed
     if (!res.ok) failed += 1;
   }
   return { attempted: data?.length ?? 0, failed };
+}
+
+/** Pulls fresh data from a connected platform and replaces what it contributed before. */
+export async function importFromConnector(userId: string, connectorId: string): Promise<number> {
+  const creds = await resolveConnectorSecret(connectorId);
+  if (!creds)
+    throw new ImportError(
+      "That platform isn't connected. Connect it in Settings first.",
+      "not_connected",
+    );
+  const batches = await fetchConnectorBatches(connectorId, creds);
+  let total = 0;
+  for (const b of batches) {
+    // A kind with nothing to import (e.g. no deals yet) is skipped quietly if another kind has data.
+    if (b.records.length === 0 && batches.some((x) => x.records.length > 0)) continue;
+    const out = await importParsedRecords(userId, {
+      source: connectorId as ImportSource,
+      sourceRef: b.sourceRef,
+      label: b.label,
+      kind: b.kind,
+      currency: b.currency,
+      records: b.records,
+      config: { connector: connectorId },
+      note: b.note,
+    });
+    total += out.imported;
+  }
+  return total;
 }

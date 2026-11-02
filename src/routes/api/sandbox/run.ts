@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/server/require-admin";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { isSandboxConfigured, runInSandbox } from "@/lib/server/sandbox";
@@ -22,8 +23,14 @@ const bodySchema = z.object({
 export const Route = createFileRoute("/api/sandbox/run")({
   server: {
     handlers: {
-      GET: async () => json({ configured: isSandboxConfigured() }),
+      GET: async ({ request }) => {
+        const auth = await requireAdmin(request, "view the sandbox");
+        if (!auth.ok) return auth.response;
+        return json({ configured: isSandboxConfigured() });
+      },
       POST: async ({ request }) => {
+        const auth = await requireAdmin(request, "run code in the sandbox");
+        if (!auth.ok) return auth.response;
         if (!isSandboxConfigured()) {
           return json({ error: "E2B isn't configured yet — set E2B_API_KEY on the server." }, 400);
         }

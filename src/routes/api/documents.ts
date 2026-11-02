@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/server/require-admin";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { createDocument } from "@/lib/server/documents";
@@ -20,6 +21,8 @@ export const Route = createFileRoute("/api/documents")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const auth = await requireUser(request);
+        if (!auth.ok) return auth.response;
         let raw: unknown;
         try {
           raw = await request.json();

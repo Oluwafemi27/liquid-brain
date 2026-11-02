@@ -13,13 +13,16 @@ export class ImportError extends Error {
   }
 }
 
-export type GoogleProviderId = "ga" | "sheets" | "drive" | "gmail";
+export type GoogleProviderId = "ga" | "sheets" | "drive" | "gmail" | "gsc" | "gcal" | "youtube";
 
 const PROVIDER_NAMES: Record<GoogleProviderId, string> = {
   ga: "Google Analytics",
   sheets: "Google Sheets",
   drive: "Google Drive",
   gmail: "Gmail",
+  gsc: "Search Console",
+  gcal: "Google Calendar",
+  youtube: "YouTube",
 };
 
 /** A valid access token for a connected Google provider. Refreshes it with

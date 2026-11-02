@@ -10,9 +10,19 @@ import {
   Target,
   Users,
   Workflow,
+  Coins,
+  CreditCard,
+  Ticket,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AdminAnalyticsSection } from "@/components/admin/analytics-section";
+import {
+  PlansSection,
+  PromoSection,
+  RequestedConnectors,
+  RevenueKpis,
+  SubscribersSection,
+} from "@/components/admin/billing-sections";
 import {
   ActivitySection,
   AutomationsSection,
@@ -59,6 +69,9 @@ const NAV = [
   { id: "Analytics", icon: BarChart3, group: "Data" },
   { id: "Automations", icon: Workflow, group: "Data" },
   { id: "Goals", icon: Target, group: "Data" },
+  { id: "Plans", icon: CreditCard, group: "Revenue" },
+  { id: "Promo codes", icon: Ticket, group: "Revenue" },
+  { id: "Subscribers", icon: Coins, group: "Revenue" },
   { id: "Security", icon: ShieldCheck, group: "System" },
 ] as const;
 type Section = (typeof NAV)[number]["id"];
@@ -184,16 +197,24 @@ function AdminPage() {
 
           <main className="min-w-0">
             {section === "Dashboard" ? (
-              <OverviewSection
-                overview={overview}
-                users={users}
-                goTo={(s) => setSection(s as Section)}
-              />
+              <>
+                <OverviewSection
+                  overview={overview}
+                  users={users}
+                  goTo={(s) => setSection(s as Section)}
+                />
+                <RevenueKpis />
+              </>
             ) : null}
             {section === "Users" ? (
               <UsersSection users={users} setUsers={setUsers} selfId={user?.id} />
             ) : null}
-            {section === "Connections" ? <ConnectionsSection /> : null}
+            {section === "Connections" ? (
+              <>
+                <ConnectionsSection />
+                <RequestedConnectors />
+              </>
+            ) : null}
             {section === "Activity" ? <ActivitySection /> : null}
             {section === "Analytics" ? (
               <div>
@@ -211,6 +232,9 @@ function AdminPage() {
             {section === "Goals" ? (
               <GoalsSection rows={goals ?? []} setRows={setGoals} loading={goals === null} />
             ) : null}
+            {section === "Plans" ? <PlansSection /> : null}
+            {section === "Promo codes" ? <PromoSection /> : null}
+            {section === "Subscribers" ? <SubscribersSection /> : null}
             {section === "Security" ? <SecuritySection /> : null}
           </main>
         </div>

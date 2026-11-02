@@ -1,5 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { KEY_CONNECTORS } from "@/lib/connector-catalog";
+import { CONNECTOR_BY_ID } from "@/lib/connector-registry";
 
 export interface OAuthProviderConfig {
   id: string;
@@ -191,6 +192,43 @@ export const OAUTH_PROVIDERS: Record<string, ProviderConfig> = {
     keyBased: true,
   },
 };
+
+const googleSibling = (id: string, displayName: string, scope: string): OAuthProviderConfig => ({
+  id,
+  displayName,
+  authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+  tokenUrl: "https://oauth2.googleapis.com/token",
+  scope,
+  clientId: process.env["GOOGLE_CLIENT_ID"],
+  clientSecret: process.env["GOOGLE_CLIENT_SECRET"],
+  extraAuthorizeParams: { access_type: "offline", prompt: "consent" },
+});
+// Same Google OAuth app as Analytics / Sheets — no extra credentials needed, just the API enabled.
+OAUTH_PROVIDERS["gsc"] = googleSibling(
+  "gsc",
+  "Search Console",
+  "https://www.googleapis.com/auth/webmasters.readonly",
+);
+OAUTH_PROVIDERS["gcal"] = googleSibling(
+  "gcal",
+  "Google Calendar",
+  "https://www.googleapis.com/auth/calendar.readonly",
+);
+OAUTH_PROVIDERS["youtube"] = googleSibling(
+  "youtube",
+  "YouTube",
+  "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly",
+);
+
+// Every pasted-credential connector in the catalog is registered automatically.
+for (const [id, def] of Object.entries(KEY_CONNECTORS)) {
+  OAUTH_PROVIDERS[id] = {
+    id,
+    displayName: CONNECTOR_BY_ID[id]?.name ?? id,
+    keyBased: true,
+    fieldNames: def.fields.map((f) => f.name),
+  };
+}
 
 export function getProvider(id: string): ProviderConfig | undefined {
   return OAUTH_PROVIDERS[id];

@@ -1,4 +1,10 @@
-import { dailyMessageCapReached, logAutoReply } from "./message-limits";
+import { dailyMessageCapReached, getTelegramOwnerId, logAutoReply } from "./message-limits";
+import {
+  EntitlementError,
+  QuotaExceededError,
+  assertTokensAvailable,
+  withBilling,
+} from "./billing";
 import "@tanstack/react-start/server-only";
 import { randomBytes } from "node:crypto";
 import { runWithHarness } from "./agent-harness";
@@ -472,7 +478,7 @@ async function onBusinessMessage(update: TgUpdate, msg: TgMessage) {
   if (!settings.autoReplyEnabled || !conn["can_reply"]) return;
   if (await isPaused(chatId)) return;
   if ((await repliesInLastHour(chatId)) >= settings.maxRepliesPerHour) return;
-  const ownerId = (conn["user_id"] as string | null) ?? null;
+  const ownerId = await getTelegramOwnerId();
   // Owner-set daily cap on customer messages: stop sending (and say why in the log) once it's hit.
   if (ownerId && (await dailyMessageCapReached(ownerId))) return;
 
@@ -490,13 +496,22 @@ async function onBusinessMessage(update: TgUpdate, msg: TgMessage) {
   let reply: { text: string; handoff: boolean };
   try {
     const history = await chatTurns(chatId, update.update_id);
-    reply = await generateCustomerReply(
-      ownerName,
-      settings.businessInfo,
-      history,
-      text.slice(0, 2000),
-    );
+    const draft = () =>
+      generateCustomerReply(ownerName, settings.businessInfo, history, text.slice(0, 2000));
+    // Customer replies are paid for from the owner's token balance.
+    if (ownerId) await assertTokensAvailable(ownerId);
+    reply = ownerId
+      ? await withBilling({ userId: ownerId, feature: "telegram" }, draft)
+      : await draft();
   } catch (error) {
+    if (error instanceof QuotaExceededError || error instanceof EntitlementError) {
+      await alertOwner(
+        token,
+        conn["user_chat_id"] as number,
+        `⚠️ You're out of AI tokens, so I couldn't answer ${customerName}. Please reply yourself, or top up in Billing.`,
+      );
+      return;
+    }
     // Stay silent rather than send the customer an error, and tell the owner.
     console.error("[telegram-business] couldn't generate reply", error);
     await alertOwner(

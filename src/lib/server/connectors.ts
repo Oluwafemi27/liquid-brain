@@ -1,5 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
+import { CONNECTOR_IDS } from "@/lib/connector-registry";
 import { getProvider, isOAuth } from "./oauth-providers";
 
 export interface ConnectorStatus {
@@ -14,23 +15,7 @@ export interface ConnectorStatus {
  *  (if a backend is configured) with which providers have OAuth app
  *  credentials set at all. Never throws — callers always get a full map. */
 export async function getConnectorStatuses(): Promise<Record<string, ConnectorStatus>> {
-  const ids = [
-    "shopify",
-    "ga",
-    "telegram",
-    "paystack",
-    "meta",
-    "sheets",
-    "drive",
-    "gmail",
-    "instagram",
-    "tiktok",
-    "discord",
-    "aliexpress",
-    "alibaba",
-    "semrush",
-    "jumia",
-  ];
+  const ids = CONNECTOR_IDS;
   const base: Record<string, ConnectorStatus> = {};
   for (const id of ids) {
     const provider = getProvider(id);

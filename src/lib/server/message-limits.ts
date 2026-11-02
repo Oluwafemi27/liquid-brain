@@ -15,7 +15,7 @@ export async function dailyMessageCapReached(ownerUserId: string): Promise<boole
     .select("id", { count: "exact", head: true })
     .eq("workspace_id", DEFAULT_WORKSPACE_ID)
     .eq("direction", "out")
-    .gte("created_at", since);
+    .gte("received_at", since);
   if ((count ?? 0) < dailyMessageCap) return false;
 
   const hourAgo = new Date(Date.now() - 3_600_000).toISOString();
@@ -46,4 +46,16 @@ export async function logAutoReply(ownerUserId: string, handoff: boolean): Promi
     title: handoff ? "Auto-replied, then handed a customer to you" : "Auto-replied to a customer",
     status: "ok",
   });
+}
+
+/** The ADUF account that owns the Telegram bot (telegram_business_connections.user_id is a *Telegram* id). */
+export async function getTelegramOwnerId(): Promise<string | null> {
+  const db = getSupabaseAdmin();
+  if (!db) return null;
+  const { data } = await db
+    .from("telegram_connections")
+    .select("owner_user_id")
+    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .maybeSingle();
+  return (data?.["owner_user_id"] as string | null) ?? null;
 }

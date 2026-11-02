@@ -1,3 +1,4 @@
+import { authHeaders } from "@/lib/auth-headers";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -260,7 +261,7 @@ function BrainPage() {
       .then((base64Content) =>
         fetch("/api/documents/upload", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { ...authHeaders(), "content-type": "application/json" },
           body: JSON.stringify({ sessionId, filename: file.name, format, base64Content }),
         }),
       )

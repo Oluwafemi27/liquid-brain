@@ -334,3 +334,20 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Verdict status light: glows continuously in its status colour (--orb is "r g b"). */
+@keyframes aduf-orb-glow {
+  0%, 100% { box-shadow: 0 0 6px 1px rgb(var(--orb) / 0.35), 0 0 14px 2px rgb(var(--orb) / 0.18); }
+  50% { box-shadow: 0 0 16px 4px rgb(var(--orb) / 0.8), 0 0 34px 10px rgb(var(--orb) / 0.38); }
+}
+@keyframes aduf-orb-dot {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.4); }
+}
+.verdict-orb { animation: aduf-orb-glow 2.4s ease-in-out infinite; }
+.verdict-orb-dot { animation: aduf-orb-dot 2.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .verdict-orb { animation: none; box-shadow: 0 0 16px 3px rgb(var(--orb) / 0.55); }
+  .verdict-orb-dot { animation: none; }
+}

@@ -1,3 +1,4 @@
+import { authHeaders } from "@/lib/auth-headers";
 import { Loader2, Sparkle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/aduf/liquid";
@@ -24,7 +25,7 @@ export function SkillsPanel() {
   const [pending, setPending] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/skills")
+    fetch("/api/skills", { headers: authHeaders() })
       .then((r) => r.json())
       .then((data: { skills: Skill[] }) => setSkills(data.skills))
       .catch(() => {})
@@ -37,7 +38,7 @@ export function SkillsPanel() {
     try {
       await fetch("/api/skills", {
         method: "PATCH",
-        headers: { "content-type": "application/json" },
+        headers: { ...authHeaders(), "content-type": "application/json" },
         body: JSON.stringify({ id, enabled }),
       });
     } catch {

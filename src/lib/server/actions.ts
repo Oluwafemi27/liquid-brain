@@ -21,6 +21,7 @@ import {
 import { usdRates } from "./business-data";
 import { createGoal, deleteGoal } from "./goals";
 import { createSafeModeDeployment } from "./n8n-deployments";
+import { requireFeature, withBilling } from "./billing";
 import { getOwnerSettings } from "./owner-settings";
 import { createScheduleEvent, deleteScheduleEvent } from "./schedule";
 import { getSupabaseAdmin } from "./supabase";
@@ -424,12 +425,15 @@ async function execute(
       return { result: { entityId: a.id, note: "Added to your Automation Grid." }, changed: true };
     }
     case "deploy_n8n_workflow": {
-      const d = await createSafeModeDeployment(userId, {
-        name: String(p["name"]),
-        reasoning,
-        templateId: p["templateId"] ? String(p["templateId"]) : undefined,
-        buildBrief: p["buildBrief"] ? String(p["buildBrief"]) : undefined,
-      });
+      await requireFeature(userId, "n8n");
+      const d = await withBilling({ userId, feature: "n8n" }, () =>
+        createSafeModeDeployment(userId, {
+          name: String(p["name"]),
+          reasoning,
+          templateId: p["templateId"] ? String(p["templateId"]) : undefined,
+          buildBrief: p["buildBrief"] ? String(p["buildBrief"]) : undefined,
+        }),
+      );
       return {
         result: {
           entityId: d.id,

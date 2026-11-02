@@ -1,3 +1,4 @@
+import { authHeaders } from "@/lib/auth-headers";
 import { CircleCheck, KeyRound, Loader2, Star, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/aduf/liquid";
@@ -29,7 +30,7 @@ export function ModelKeysPanel() {
 
   const load = () => {
     setLoading(true);
-    fetch("/api/model-keys")
+    fetch("/api/model-keys", { headers: authHeaders() })
       .then((r) => r.json())
       .then((data: { providers: ProviderStatus[] }) => {
         setProviders(data.providers);
@@ -57,7 +58,7 @@ export function ModelKeysPanel() {
     try {
       const res = await fetch("/api/model-keys", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { ...authHeaders(), "content-type": "application/json" },
         body: JSON.stringify({
           providerId: selected,
           apiKey: apiKey.trim(),
@@ -80,7 +81,7 @@ export function ModelKeysPanel() {
     try {
       const res = await fetch("/api/model-keys", {
         method: "DELETE",
-        headers: { "content-type": "application/json" },
+        headers: { ...authHeaders(), "content-type": "application/json" },
         body: JSON.stringify({ providerId }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Failed to remove key");
@@ -95,7 +96,7 @@ export function ModelKeysPanel() {
     try {
       const res = await fetch("/api/model-keys", {
         method: "PATCH",
-        headers: { "content-type": "application/json" },
+        headers: { ...authHeaders(), "content-type": "application/json" },
         body: JSON.stringify({ providerId }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Failed to set default");

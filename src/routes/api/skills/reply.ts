@@ -1,3 +1,5 @@
+import { QuotaExceededError, assertTokensAvailable, withBilling } from "@/lib/server/billing";
+import { requireUser } from "@/lib/server/require-admin";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { runWithHarness } from "@/lib/server/agent-harness";
@@ -28,6 +30,8 @@ export const Route = createFileRoute("/api/skills/reply")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const auth = await requireUser(request);
+        if (!auth.ok) return auth.response;
         let raw: unknown;
         try {
           raw = await request.json();
@@ -62,27 +66,34 @@ export const Route = createFileRoute("/api/skills/reply")({
         const system = `${skill.systemPrompt}\n\nRespond with ONLY the reply text — no preamble, no quotation marks, no explanation.`;
 
         try {
-          const { result, trace } = await runWithHarness(
-            `skill-reply-${channel}`,
-            async () => {
-              const { text } = await callProviderChat(provider, key.apiKey, {
-                system,
-                messages: [
-                  {
-                    role: "user",
-                    content: context
-                      ? `Context:\n${context}\n\nIncoming ${channel} message:\n${incomingText}`
-                      : `Incoming ${channel} message:\n${incomingText}`,
-                  },
-                ],
-              });
-              if (!text.trim()) throw new Error("Model returned an empty reply.");
-              return text.trim();
-            },
-            { maxAttempts: 3 },
+          await assertTokensAvailable(auth.userId);
+          const { result, trace } = await withBilling(
+            { userId: auth.userId, feature: "skills" },
+            () =>
+              runWithHarness(
+                `skill-reply-${channel}`,
+                async () => {
+                  const { text } = await callProviderChat(provider, key.apiKey, {
+                    system,
+                    messages: [
+                      {
+                        role: "user",
+                        content: context
+                          ? `Context:\n${context}\n\nIncoming ${channel} message:\n${incomingText}`
+                          : `Incoming ${channel} message:\n${incomingText}`,
+                      },
+                    ],
+                  });
+                  if (!text.trim()) throw new Error("Model returned an empty reply.");
+                  return text.trim();
+                },
+                { maxAttempts: 3 },
+              ),
           );
           return json({ reply: result, trace });
         } catch (error) {
+          if (error instanceof QuotaExceededError)
+            return json({ error: error.message, code: "quota" }, 402);
           const message = error instanceof Error ? error.message : "Failed to draft a reply";
           return json({ error: message }, 500);
         }

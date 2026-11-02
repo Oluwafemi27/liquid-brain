@@ -1,3 +1,4 @@
+import { EntitlementError, QuotaExceededError } from "./billing";
 import "@tanstack/react-start/server-only";
 import type { AgentTraceStep } from "@/lib/aduf-types";
 import { getSupabaseAdmin, DEFAULT_WORKSPACE_ID } from "./supabase";
@@ -68,6 +69,8 @@ export async function runWithHarness<T>(
       return { result, trace, attempts: attempt };
     } catch (error) {
       if (error instanceof HarnessExhaustedError) throw error;
+      // Retrying can't fix a spent allowance or a plan limit — surface it to the caller right away.
+      if (error instanceof QuotaExceededError || error instanceof EntitlementError) throw error;
       const message = error instanceof Error ? error.message : String(error);
       step.status = "error";
       step.detail = message;

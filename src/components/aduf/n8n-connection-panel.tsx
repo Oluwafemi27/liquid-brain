@@ -1,3 +1,4 @@
+import { authHeaders } from "@/lib/auth-headers";
 import { CircleCheck, Loader2, ShieldCheck, Trash2, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/aduf/liquid";
@@ -26,7 +27,7 @@ export function N8nConnectionPanel() {
 
   const load = () => {
     setLoading(true);
-    fetch("/api/n8n-connection")
+    fetch("/api/n8n-connection", { headers: authHeaders() })
       .then((r) => r.json())
       .then((data: N8nStatus) => setStatus(data))
       .catch(() => setError("Couldn't load n8n connection status."))
@@ -42,7 +43,7 @@ export function N8nConnectionPanel() {
     try {
       const res = await fetch("/api/n8n-connection", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { ...authHeaders(), "content-type": "application/json" },
         body: JSON.stringify({ instanceUrl: instanceUrl.trim(), apiKey: apiKey.trim() }),
       });
       const data = await res.json();
@@ -59,7 +60,7 @@ export function N8nConnectionPanel() {
   const disconnect = async () => {
     setError(null);
     try {
-      const res = await fetch("/api/n8n-connection", { method: "DELETE" });
+      const res = await fetch("/api/n8n-connection", { headers: authHeaders(), method: "DELETE" });
       if (!res.ok) throw new Error((await res.json()).error ?? "Failed to disconnect");
       setInstanceUrl("");
       load();

@@ -1,3 +1,4 @@
+import { billingContext, requireFeature } from "./billing";
 import "@tanstack/react-start/server-only";
 import { Sandbox } from "@e2b/code-interpreter";
 import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
@@ -31,6 +32,9 @@ export async function runInSandbox(
   code: string,
   opts: { language?: "python" | "javascript" | "bash"; sessionId?: string } = {},
 ): Promise<SandboxRunResult> {
+  // Code execution costs real money: inside a user's request it must be in their plan.
+  const billing = billingContext();
+  if (billing) await requireFeature(billing.userId, "sandbox");
   const apiKey = process.env["E2B_API_KEY"];
   if (!apiKey) {
     throw new Error(

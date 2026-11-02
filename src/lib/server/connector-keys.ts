@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { verifyCredentials } from "./connector-verify";
 import { openToken } from "./crypto-tokens";
 import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
 import { getProvider, type KeyBasedProviderConfig } from "./oauth-providers";
@@ -34,6 +35,10 @@ export async function saveConnectorKeys(
     }
     clean[name] = v;
   }
+
+  // Prove the credentials work BEFORE saving: a wrong key must never show up as "Connected".
+  const verdict = await verifyCredentials(providerId, clean, provider.displayName);
+  if (!verdict.ok) return { ok: false, error: verdict.error };
 
   // Hint = last 4 chars of the primary (last) field, so the owner can tell which key is on file.
   const lastValue = Object.values(clean).at(-1) ?? "";
@@ -90,7 +95,7 @@ export async function disconnectConnector(providerId: string): Promise<void> {
   if (!db) throw new Error("No backend configured.");
   // Cut the login off at Google too, not just forget it here. Best-effort: a failure
   // here must never block the owner from disconnecting locally.
-  if (["ga", "sheets", "drive", "gmail"].includes(providerId)) {
+  if (["ga", "sheets", "drive", "gmail", "gsc", "gcal", "youtube"].includes(providerId)) {
     try {
       const { data } = await db
         .from("connectors")

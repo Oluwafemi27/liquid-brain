@@ -5,7 +5,7 @@ import { logEvent } from "./activity";
 import { getGoogleAccessToken, ImportError, type GoogleProviderId } from "./google-auth";
 import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
 
-const GOOGLE_IDS = ["ga", "sheets", "drive", "gmail"] as const;
+const GOOGLE_IDS = ["ga", "sheets", "drive", "gmail", "gsc", "gcal", "youtube"] as const;
 const CACHE_MS = 10 * 60_000;
 const STALE_SYNC_DAYS = 3;
 

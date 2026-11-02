@@ -1,3 +1,4 @@
+import { assertTokensAvailable, billingContext, estimateTokens, recordUsage } from "./billing";
 import "@tanstack/react-start/server-only";
 
 export type ApiStyle = "openai_compatible" | "anthropic" | "gemini";
@@ -64,13 +65,15 @@ export interface ChatTurn {
 
 export interface ProviderCallResult {
   text: string;
+  /** Total tokens the provider says it used (0 when it didn't report any). */
+  tokens?: number;
 }
 
 /** Calls whichever provider's chat endpoint, normalizing the very different
  *  request/response shapes into plain text. Every branch throws a plain
  *  Error with the provider's own error body on failure — the self-healing
  *  harness (see agent-harness.ts) is what turns that into a retry. */
-export async function callProviderChat(
+async function callProviderChatRaw(
   provider: ModelProvider,
   apiKey: string,
   args: { system: string; messages: ChatTurn[]; model?: string },
@@ -93,9 +96,12 @@ export async function callProviderChat(
       }),
     });
     if (!res.ok) throw new Error(await providerError(provider.id, res));
-    const data = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+    const data = (await res.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
     const text = data.content?.find((b) => b.type === "text")?.text ?? "";
-    return { text };
+    return { text, tokens: (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0) };
   }
 
   if (provider.apiStyle === "gemini") {
@@ -113,9 +119,10 @@ export async function callProviderChat(
     if (!res.ok) throw new Error(await providerError(provider.id, res));
     const data = (await res.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      usageMetadata?: { totalTokenCount?: number };
     };
     const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-    return { text };
+    return { text, tokens: data.usageMetadata?.totalTokenCount ?? 0 };
   }
 
   // openai_compatible — OpenAI, DeepSeek, Groq, Grok all speak this shape.
@@ -133,9 +140,31 @@ export async function callProviderChat(
   if (!res.ok) throw new Error(await providerError(provider.id, res));
   const data = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
+    usage?: { total_tokens?: number };
   };
   const text = data.choices?.[0]?.message?.content ?? "";
-  return { text };
+  return { text, tokens: data.usage?.total_tokens ?? 0 };
+}
+
+/** Every model call goes through here. Inside a billing context (set by the route that handles the
+ *  user's request) it first checks the person has tokens left, and afterwards charges what the
+ *  provider reported (or a length-based estimate if it didn't). Failed calls cost nothing. */
+export async function callProviderChat(
+  provider: ModelProvider,
+  apiKey: string,
+  args: Parameters<typeof callProviderChatRaw>[2],
+): Promise<ProviderCallResult> {
+  const ctx = billingContext();
+  if (ctx) await assertTokensAvailable(ctx.userId);
+  const out = await callProviderChatRaw(provider, apiKey, args);
+  if (ctx) {
+    const used =
+      out.tokens && out.tokens > 0
+        ? out.tokens
+        : estimateTokens(args.system, ...args.messages.map((m) => m.content), out.text);
+    await recordUsage(ctx.userId, used, ctx.feature);
+  }
+  return { text: out.text, tokens: out.tokens ?? 0 };
 }
 
 async function providerError(providerId: string, res: Response): Promise<string> {
