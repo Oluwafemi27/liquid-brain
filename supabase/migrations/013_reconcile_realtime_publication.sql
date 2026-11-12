@@ -1,0 +1,23 @@
+-- === Migration 013: reconcile supabase_realtime publication ===
+-- Migration 012 already contains
+--   alter publication supabase_realtime add table insights;
+--   alter publication supabase_realtime add table schedule_events;
+-- but a check against the live "liquid-brain" project found both missing
+-- from `pg_publication_tables` — only automation_runs, automations,
+-- chat_messages, goals, and n8n_deployments were actually in the
+-- publication. Whatever ran 012 against this project didn't apply those
+-- two lines (or they were reverted since). Net effect: the Insight Feed
+-- and the Schedule page only ever updated on a full page reload, never
+-- live across tabs/sessions, even though NotificationsBootstrap and
+-- ScheduleBootstrap were both already subscribing correctly on the
+-- client side — Postgres just wasn't emitting the change events for
+-- either table to stream out.
+--
+-- This file documents the fix, which has already been applied directly
+-- to the live project via the Supabase connector (Supabase's migration
+-- history now has this as an applied migration, same as any other) — it's
+-- included here so the repo's migration history matches what's actually
+-- live, and so a fresh install of this schema (a new project) also gets
+-- it, since schema.sql below is likewise updated.
+alter publication supabase_realtime add table insights;
+alter publication supabase_realtime add table schedule_events;

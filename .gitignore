@@ -1,0 +1,17 @@
+.output/
+.wrangler/
+node_modules/
+
+.env
+.env.*
+!.env.example
+
+playwright-report/
+test-results/
+node_modules
+.env
+.env.*
+!.env.example
+dist
+playwright-report
+test-results

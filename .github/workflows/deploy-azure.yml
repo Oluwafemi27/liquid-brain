@@ -1,0 +1,65 @@
+# Builds the Docker image on GitHub, pushes it to your Azure Container Registry and rolls it out to
+# Azure Container Apps on every push to main. (Built on the GitHub runner, not with `az acr build`,
+# because Azure blocks ACR Tasks on many student/free subscriptions.)
+#
+# Setup is in docs/AZURE.md. GitHub > Settings > Secrets and variables > Actions:
+#   Secrets:   AZURE_CREDENTIALS, ACR_NAME, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+#              (optional: VITE_SENTRY_DSN, VITE_DD_APPLICATION_ID, VITE_DD_CLIENT_TOKEN)
+#   Variables: AZURE_RESOURCE_GROUP (e.g. Aduf), AZURE_CONTAINER_APP (e.g. aduf), optional VITE_DD_SITE
+name: Deploy to Azure
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  APP_NAME: ${{ vars.AZURE_CONTAINER_APP }}
+  REGISTRY: ${{ secrets.ACR_NAME }}.azurecr.io
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the setup
+        run: |
+          missing=""
+          [ -z "${{ secrets.AZURE_CREDENTIALS }}" ] && missing="$missing AZURE_CREDENTIALS"
+          [ -z "${{ secrets.ACR_NAME }}" ] && missing="$missing ACR_NAME"
+          [ -z "${{ secrets.VITE_SUPABASE_URL }}" ] && missing="$missing VITE_SUPABASE_URL"
+          [ -z "${{ secrets.VITE_SUPABASE_ANON_KEY }}" ] && missing="$missing VITE_SUPABASE_ANON_KEY"
+          [ -z "${{ vars.AZURE_RESOURCE_GROUP }}" ] && missing="$missing (variable)AZURE_RESOURCE_GROUP"
+          [ -z "${{ vars.AZURE_CONTAINER_APP }}" ] && missing="$missing (variable)AZURE_CONTAINER_APP"
+          if [ -n "$missing" ]; then echo "::error::Missing in GitHub settings:$missing"; exit 1; fi
+
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to the registry
+        run: az acr login --name "${{ secrets.ACR_NAME }}"
+
+      - name: Build the image
+        run: |
+          docker build -t "$REGISTRY/aduf:${{ github.sha }}" -t "$REGISTRY/aduf:latest" \
+            --build-arg VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
+            --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+            --build-arg VITE_SENTRY_DSN="${{ secrets.VITE_SENTRY_DSN }}" \
+            --build-arg VITE_DD_APPLICATION_ID="${{ secrets.VITE_DD_APPLICATION_ID }}" \
+            --build-arg VITE_DD_CLIENT_TOKEN="${{ secrets.VITE_DD_CLIENT_TOKEN }}" \
+            --build-arg VITE_DD_SITE="${{ vars.VITE_DD_SITE }}" .
+
+      - name: Push the image
+        run: |
+          docker push "$REGISTRY/aduf:${{ github.sha }}"
+          docker push "$REGISTRY/aduf:latest"
+
+      - name: Roll out the new image
+        run: |
+          az containerapp update --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
+            --image "$REGISTRY/aduf:${{ github.sha }}"
+
+      - name: Show the address
+        run: |
+          az containerapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
+            --query "properties.configuration.ingress.fqdn" -o tsv

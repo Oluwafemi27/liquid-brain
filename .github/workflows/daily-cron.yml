@@ -1,0 +1,12 @@
+# Replaces Vercel Cron when ADUF runs on Azure: calls the daily housekeeping route once a day.
+# Needs secrets APP_URL (e.g. https://aduf.example.com) and CRON_SECRET (same value as on the server).
+name: Daily housekeeping
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl --fail --silent --show-error --max-time 120 -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.APP_URL }}/api/cron/daily"
