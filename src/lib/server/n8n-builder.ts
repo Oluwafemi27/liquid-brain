@@ -3,6 +3,7 @@ import { resolveDefaultModelKey } from "./model-keys";
 import { MODEL_PROVIDERS, callProviderChat } from "./model-providers";
 import { searchN8nSkillDocs } from "./n8n-skills";
 import { searchN8nTemplates } from "./n8n-templates";
+import { strategyFor } from "./n8n-composio";
 import { schemaIndexSummary, validateWorkflowAgainstSchema } from "./n8n-schema-validator";
 
 /** "Build one from the available workflows" — the fallback path when
@@ -23,9 +24,10 @@ export async function buildWorkflowFromBrief(
   const provider = MODEL_PROVIDERS[key.providerId];
   if (!provider) throw new Error(`Unknown model provider "${key.providerId}"`);
 
-  const [scaffolds, docs] = await Promise.all([
+  const [scaffolds, docs, strategy] = await Promise.all([
     searchN8nTemplates(brief, 3),
     searchN8nSkillDocs(brief, 3),
+    strategyFor(userId, brief),
   ]);
 
   const scaffoldBlock = scaffolds.length
@@ -48,9 +50,11 @@ export async function buildWorkflowFromBrief(
     `schedule trigger unless the brief clearly implies otherwise. Never set "active": true — ` +
     `it will always be deployed off regardless. Keep credentials referenced by name/placeholder ` +
     `only (e.g. {"credentials": {"shopifyApi": {"name": "Shopify account"}}}) since real ` +
-    `credential ids don't exist yet on the target instance. Only use core n8n node types ` +
+    `credential ids don't exist yet on the target instance (the "Credentials" section below overrides ` +
+    `this when it applies). Only use core n8n node types ` +
     `(n8n-nodes-base.*) with real "resource"/"operation" values — ${schemaIndexSummary()} — ` +
     `never invent a node type or a resource/operation combination.\n\n${scaffoldBlock}` +
+    `\n\n${strategy.promptBlock}` +
     (docsBlock ? `\n\n=== Platform reference ===\n${docsBlock}` : "");
 
   const { text } = await callProviderChat(provider, key.apiKey, {
@@ -64,7 +68,8 @@ export async function buildWorkflowFromBrief(
   // resource/operation, feed the exact issues back and ask it to fix them
   // rather than silently shipping something we already know is broken.
   const issues = validateWorkflowAgainstSchema(workflowJson);
-  if (issues.length === 0) return workflowJson;
+  const policy = strategy.issues(workflowJson);
+  if (issues.length === 0 && policy.length === 0) return strategy.finalize(workflowJson);
 
   const { text: repaired } = await callProviderChat(provider, key.apiKey, {
     system,
@@ -75,7 +80,10 @@ export async function buildWorkflowFromBrief(
         role: "user",
         content:
           `That workflow has validation issues against the real n8n schema:\n` +
-          issues.map((i) => `- Node "${i.nodeName}" (${i.nodeType}): ${i.message}`).join("\n") +
+          [
+            ...issues.map((i) => `- Node "${i.nodeName}" (${i.nodeType}): ${i.message}`),
+            ...policy.map((m) => `- ${m}`),
+          ].join("\n") +
           `\n\nOutput the corrected full workflow JSON only, same rules as before.`,
       },
     ],
@@ -85,7 +93,7 @@ export async function buildWorkflowFromBrief(
   // If it's still wrong after one repair pass, ship it anyway — the live
   // testDeployWorkflow() check downstream (and the repair-agent loop) is
   // the real backstop, not an infinite local retry loop.
-  return correctedJson;
+  return strategy.finalize(correctedJson);
 }
 
 function parseWorkflowJson(text: string): Record<string, unknown> {

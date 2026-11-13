@@ -179,8 +179,11 @@ export async function runTool(
   toolkit: string,
   toolSlug: string,
   args: Record<string, unknown>,
+  connectedAccountId?: string,
 ): Promise<ToolRunResult> {
-  const conn = (await listConnections(userId)).find((x) => x.toolkit === toolkit);
+  const conn = (await listConnections(userId)).find(
+    (x) => x.toolkit === toolkit && (!connectedAccountId || x.id === connectedAccountId),
+  );
   if (!conn)
     throw new Error(`${toolkit} isn't connected. Connect it on the Connectors page first.`);
   const res = await composio().tools.execute(toolSlug, {
@@ -190,4 +193,79 @@ export async function runTool(
     dangerouslySkipVersionCheck: true,
   });
   return { successful: Boolean(res.successful), error: res.error ?? null, data: res.data };
+}
+
+/** Tokens for one of this user's connections, for creating a credential inside the ADUF-controlled n8n
+ *  (Method 1). Server only: never send this to the browser or log it. Composio keeps the tokens fresh, so
+ *  call this again to get a new access token. Returns null if Composio hides secrets for the project. */
+export async function getConnectionTokens(
+  userId: string,
+  toolkit: string,
+): Promise<{
+  connectionId: string;
+  accessToken: string;
+  refreshToken: string | null;
+  expiresAt: string | null;
+  scope: string | null;
+} | null> {
+  const conn = (await listConnections(userId)).find((x) => x.toolkit === toolkit);
+  if (!conn) return null;
+  const acct = (await composio().connectedAccounts.get(conn.id)) as unknown as Record<
+    string,
+    unknown
+  >;
+  const state = (acct["state"] as Record<string, unknown> | undefined) ?? {};
+  const val = ((state["val"] ?? acct["data"]) as Record<string, unknown> | undefined) ?? {};
+  const accessToken = (val["access_token"] ?? val["api_key"] ?? val["token"]) as string | undefined;
+  if (!accessToken || /^\*+$/.test(accessToken)) return null;
+  const expiresIn = Number(val["expires_in"]);
+  return {
+    connectionId: conn.id,
+    accessToken,
+    refreshToken: (val["refresh_token"] as string | undefined) ?? null,
+    expiresAt:
+      (val["expires_at"] as string | undefined) ??
+      (Number.isFinite(expiresIn) && expiresIn > 0
+        ? new Date(Date.now() + expiresIn * 1000).toISOString()
+        : null),
+    scope: (val["scope"] as string | undefined) ?? null,
+  };
+}
+
+/** Starts watching an event (e.g. GMAIL_NEW_GMAIL_MESSAGE) for this user's connected account.
+ *  Composio delivers events to the project's webhook (see ensureWebhookSubscription). */
+export async function createTrigger(
+  userId: string,
+  slug: string,
+  connectedAccountId: string,
+  config: Record<string, unknown>,
+): Promise<string> {
+  const res = await composio().triggers.create(userId, slug, {
+    connectedAccountId,
+    triggerConfig: config,
+  });
+  return res.triggerId;
+}
+
+export async function deleteTrigger(triggerId: string): Promise<void> {
+  await composio().triggers.delete(triggerId);
+}
+
+/** Points the Composio project's webhook at ADUF (one URL for all users; ADUF routes each event). */
+export async function ensureWebhookSubscription(webhookUrl: string): Promise<string | undefined> {
+  const sub = await composio().triggers.setWebhookSubscription({ webhookUrl });
+  return sub.secret;
+}
+
+/** Checks Composio's signature and returns the event. Throws if the signature is wrong or too old. */
+export async function verifyTriggerWebhook(input: {
+  id: string;
+  payload: string;
+  signature: string;
+  timestamp: string;
+}): Promise<Record<string, unknown>> {
+  const secret = process.env["COMPOSIO_WEBHOOK_SECRET"];
+  if (!secret) throw new Error("COMPOSIO_WEBHOOK_SECRET is not set.");
+  const res = await composio().triggers.verifyWebhook({ ...input, secret });
+  return res.rawPayload as unknown as Record<string, unknown>;
 }

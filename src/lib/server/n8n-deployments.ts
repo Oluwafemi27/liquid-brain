@@ -3,6 +3,12 @@ import { getSupabaseAdmin } from "./supabase";
 import { activateN8nWorkflow, deactivateN8nWorkflow, deployN8nWorkflow } from "./n8n-client";
 import { getDeployableTemplateJson } from "./n8n-templates";
 import { buildWorkflowFromBrief } from "./n8n-builder";
+import {
+  chooseN8nMethod,
+  injectCredentials,
+  registerTriggersForDeployment,
+  unregisterTriggersForDeployment,
+} from "./n8n-composio";
 
 export interface N8nDeployment {
   id: string;
@@ -77,6 +83,13 @@ export async function createSafeModeDeployment(
     if (!deployable) throw new Error("Template not found.");
     workflowJson = deployable.workflowJson;
     builtFrom = "template";
+    if (chooseN8nMethod() === "inject") {
+      // Hosted n8n: link the owner's credentials so they never see a credential screen.
+      const linked = await injectCredentials(userId, workflowJson);
+      if (linked.missing.length)
+        throw new Error(`Connect ${linked.missing.join(", ")} first (Connectors), then try again.`);
+      workflowJson = linked.workflow;
+    }
   } else if (input.generatedJson) {
     workflowJson = input.generatedJson;
   } else if (input.buildBrief) {
@@ -139,6 +152,8 @@ export async function activateDeployment(
   if (!deployment.n8nWorkflowId)
     throw new Error("This deployment failed to reach n8n — nothing to activate.");
 
+  // Start any Composio trigger first; if that fails the workflow stays off.
+  await registerTriggersForDeployment(userId, deploymentId, deployment.n8nWorkflowId);
   await activateN8nWorkflow(userId, deployment.n8nWorkflowId);
 
   const { data, error } = await db
@@ -171,6 +186,7 @@ export async function deactivateDeployment(
   if (!row) throw new Error("Deployment not found.");
   const deployment = fromRow(row);
   if (deployment.n8nWorkflowId) await deactivateN8nWorkflow(userId, deployment.n8nWorkflowId);
+  await unregisterTriggersForDeployment(userId, deploymentId).catch(() => undefined);
 
   const { data, error } = await db
     .from("n8n_deployments")

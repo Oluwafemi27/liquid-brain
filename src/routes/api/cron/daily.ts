@@ -3,6 +3,7 @@ import { runAlertCycle, sendDigest } from "@/lib/server/alerts";
 import { checkAllConnections } from "@/lib/server/connection-health";
 import { purgeExpiredFiles } from "@/lib/server/file-retention";
 import { resyncDue } from "@/lib/server/import-sync";
+import { refreshExpiringN8nCredentials } from "@/lib/server/n8n-composio";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 import { captureServerError } from "@/lib/server/monitoring";
 import { safeEqual } from "@/lib/server/signed-links";
@@ -35,6 +36,7 @@ export const Route = createFileRoute("/api/cron/daily")({
         try {
           summary.health = (await checkAllConnections(true)).length;
           summary.sync = await resyncDue(10);
+          await refreshExpiringN8nCredentials();
         } catch (e) {
           summary.errors += 1;
           console.error("[cron] housekeeping failed", e);

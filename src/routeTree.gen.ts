@@ -24,12 +24,14 @@ import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SupplierOrdersRouteImport } from './routes/supplier-orders'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiComposioWebhookRouteImport } from './routes/api/composio-webhook'
 import { Route as ApiDocumentsRouteImport } from './routes/api/documents'
 import { Route as ApiFxRouteImport } from './routes/api/fx'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiImportMemoryRouteImport } from './routes/api/import-memory'
 import { Route as ApiModelKeysRouteImport } from './routes/api/model-keys'
 import { Route as ApiN8nConnectionRouteImport } from './routes/api/n8n-connection'
+import { Route as ApiN8nRelayRouteImport } from './routes/api/n8n-relay'
 import { Route as ApiSkillsRouteImport } from './routes/api/skills'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiAttachmentsFinishRouteImport } from './routes/api/attachments/finish'
@@ -39,6 +41,7 @@ import { Route as ApiAttachmentsVideoRouteImport } from './routes/api/attachment
 import { Route as ApiBillingPaystackWebhookRouteImport } from './routes/api/billing/paystack-webhook'
 import { Route as ApiConnectorsTelegramRouteImport } from './routes/api/connectors/telegram'
 import { Route as ApiCronDailyRouteImport } from './routes/api/cron/daily'
+import { Route as ApiCronN8nCredentialsRouteImport } from './routes/api/cron/n8n-credentials'
 import { Route as ApiCronPurgeFilesRouteImport } from './routes/api/cron/purge-files'
 import { Route as ApiDocumentsConvertRouteImport } from './routes/api/documents/convert'
 import { Route as ApiDocumentsLinkRouteImport } from './routes/api/documents/link'
@@ -129,6 +132,11 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiComposioWebhookRoute = ApiComposioWebhookRouteImport.update({
+  id: '/api/composio-webhook',
+  path: '/api/composio-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDocumentsRoute = ApiDocumentsRouteImport.update({
   id: '/api/documents',
   path: '/api/documents',
@@ -157,6 +165,11 @@ const ApiModelKeysRoute = ApiModelKeysRouteImport.update({
 const ApiN8nConnectionRoute = ApiN8nConnectionRouteImport.update({
   id: '/api/n8n-connection',
   path: '/api/n8n-connection',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiN8nRelayRoute = ApiN8nRelayRouteImport.update({
+  id: '/api/n8n-relay',
+  path: '/api/n8n-relay',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSkillsRoute = ApiSkillsRouteImport.update({
@@ -203,6 +216,11 @@ const ApiConnectorsTelegramRoute = ApiConnectorsTelegramRouteImport.update({
 const ApiCronDailyRoute = ApiCronDailyRouteImport.update({
   id: '/api/cron/daily',
   path: '/api/cron/daily',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCronN8nCredentialsRoute = ApiCronN8nCredentialsRouteImport.update({
+  id: '/api/cron/n8n-credentials',
+  path: '/api/cron/n8n-credentials',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCronPurgeFilesRoute = ApiCronPurgeFilesRouteImport.update({
@@ -296,12 +314,14 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/supplier-orders': typeof SupplierOrdersRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/composio-webhook': typeof ApiComposioWebhookRoute
   '/api/documents': typeof ApiDocumentsRouteWithChildren
   '/api/fx': typeof ApiFxRoute
   '/api/health': typeof ApiHealthRoute
   '/api/import-memory': typeof ApiImportMemoryRoute
   '/api/model-keys': typeof ApiModelKeysRoute
   '/api/n8n-connection': typeof ApiN8nConnectionRoute
+  '/api/n8n-relay': typeof ApiN8nRelayRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/attachments/finish': typeof ApiAttachmentsFinishRoute
@@ -311,6 +331,7 @@ export interface FileRoutesByFullPath {
   '/api/billing/paystack-webhook': typeof ApiBillingPaystackWebhookRoute
   '/api/connectors/telegram': typeof ApiConnectorsTelegramRouteWithChildren
   '/api/cron/daily': typeof ApiCronDailyRoute
+  '/api/cron/n8n-credentials': typeof ApiCronN8nCredentialsRoute
   '/api/cron/purge-files': typeof ApiCronPurgeFilesRoute
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/link': typeof ApiDocumentsLinkRoute
@@ -342,12 +363,14 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/supplier-orders': typeof SupplierOrdersRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/composio-webhook': typeof ApiComposioWebhookRoute
   '/api/documents': typeof ApiDocumentsRouteWithChildren
   '/api/fx': typeof ApiFxRoute
   '/api/health': typeof ApiHealthRoute
   '/api/import-memory': typeof ApiImportMemoryRoute
   '/api/model-keys': typeof ApiModelKeysRoute
   '/api/n8n-connection': typeof ApiN8nConnectionRoute
+  '/api/n8n-relay': typeof ApiN8nRelayRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/attachments/finish': typeof ApiAttachmentsFinishRoute
@@ -357,6 +380,7 @@ export interface FileRoutesByTo {
   '/api/billing/paystack-webhook': typeof ApiBillingPaystackWebhookRoute
   '/api/connectors/telegram': typeof ApiConnectorsTelegramRouteWithChildren
   '/api/cron/daily': typeof ApiCronDailyRoute
+  '/api/cron/n8n-credentials': typeof ApiCronN8nCredentialsRoute
   '/api/cron/purge-files': typeof ApiCronPurgeFilesRoute
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/link': typeof ApiDocumentsLinkRoute
@@ -389,12 +413,14 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/supplier-orders': typeof SupplierOrdersRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/composio-webhook': typeof ApiComposioWebhookRoute
   '/api/documents': typeof ApiDocumentsRouteWithChildren
   '/api/fx': typeof ApiFxRoute
   '/api/health': typeof ApiHealthRoute
   '/api/import-memory': typeof ApiImportMemoryRoute
   '/api/model-keys': typeof ApiModelKeysRoute
   '/api/n8n-connection': typeof ApiN8nConnectionRoute
+  '/api/n8n-relay': typeof ApiN8nRelayRoute
   '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/attachments/finish': typeof ApiAttachmentsFinishRoute
@@ -404,6 +430,7 @@ export interface FileRoutesById {
   '/api/billing/paystack-webhook': typeof ApiBillingPaystackWebhookRoute
   '/api/connectors/telegram': typeof ApiConnectorsTelegramRouteWithChildren
   '/api/cron/daily': typeof ApiCronDailyRoute
+  '/api/cron/n8n-credentials': typeof ApiCronN8nCredentialsRoute
   '/api/cron/purge-files': typeof ApiCronPurgeFilesRoute
   '/api/documents/convert': typeof ApiDocumentsConvertRoute
   '/api/documents/link': typeof ApiDocumentsLinkRoute
@@ -437,12 +464,14 @@ export interface FileRouteTypes {
     | '/settings'
     | '/supplier-orders'
     | '/api/chat'
+    | '/api/composio-webhook'
     | '/api/documents'
     | '/api/fx'
     | '/api/health'
     | '/api/import-memory'
     | '/api/model-keys'
     | '/api/n8n-connection'
+    | '/api/n8n-relay'
     | '/api/skills'
     | '/api/transcribe'
     | '/api/attachments/finish'
@@ -452,6 +481,7 @@ export interface FileRouteTypes {
     | '/api/billing/paystack-webhook'
     | '/api/connectors/telegram'
     | '/api/cron/daily'
+    | '/api/cron/n8n-credentials'
     | '/api/cron/purge-files'
     | '/api/documents/convert'
     | '/api/documents/link'
@@ -483,12 +513,14 @@ export interface FileRouteTypes {
     | '/settings'
     | '/supplier-orders'
     | '/api/chat'
+    | '/api/composio-webhook'
     | '/api/documents'
     | '/api/fx'
     | '/api/health'
     | '/api/import-memory'
     | '/api/model-keys'
     | '/api/n8n-connection'
+    | '/api/n8n-relay'
     | '/api/skills'
     | '/api/transcribe'
     | '/api/attachments/finish'
@@ -498,6 +530,7 @@ export interface FileRouteTypes {
     | '/api/billing/paystack-webhook'
     | '/api/connectors/telegram'
     | '/api/cron/daily'
+    | '/api/cron/n8n-credentials'
     | '/api/cron/purge-files'
     | '/api/documents/convert'
     | '/api/documents/link'
@@ -529,12 +562,14 @@ export interface FileRouteTypes {
     | '/settings'
     | '/supplier-orders'
     | '/api/chat'
+    | '/api/composio-webhook'
     | '/api/documents'
     | '/api/fx'
     | '/api/health'
     | '/api/import-memory'
     | '/api/model-keys'
     | '/api/n8n-connection'
+    | '/api/n8n-relay'
     | '/api/skills'
     | '/api/transcribe'
     | '/api/attachments/finish'
@@ -544,6 +579,7 @@ export interface FileRouteTypes {
     | '/api/billing/paystack-webhook'
     | '/api/connectors/telegram'
     | '/api/cron/daily'
+    | '/api/cron/n8n-credentials'
     | '/api/cron/purge-files'
     | '/api/documents/convert'
     | '/api/documents/link'
@@ -576,12 +612,14 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SupplierOrdersRoute: typeof SupplierOrdersRoute
   ApiChatRoute: typeof ApiChatRoute
+  ApiComposioWebhookRoute: typeof ApiComposioWebhookRoute
   ApiDocumentsRoute: typeof ApiDocumentsRouteWithChildren
   ApiFxRoute: typeof ApiFxRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiImportMemoryRoute: typeof ApiImportMemoryRoute
   ApiModelKeysRoute: typeof ApiModelKeysRoute
   ApiN8nConnectionRoute: typeof ApiN8nConnectionRoute
+  ApiN8nRelayRoute: typeof ApiN8nRelayRoute
   ApiSkillsRoute: typeof ApiSkillsRouteWithChildren
   ApiTranscribeRoute: typeof ApiTranscribeRoute
   ApiAttachmentsFinishRoute: typeof ApiAttachmentsFinishRoute
@@ -591,6 +629,7 @@ export interface RootRouteChildren {
   ApiBillingPaystackWebhookRoute: typeof ApiBillingPaystackWebhookRoute
   ApiConnectorsTelegramRoute: typeof ApiConnectorsTelegramRouteWithChildren
   ApiCronDailyRoute: typeof ApiCronDailyRoute
+  ApiCronN8nCredentialsRoute: typeof ApiCronN8nCredentialsRoute
   ApiCronPurgeFilesRoute: typeof ApiCronPurgeFilesRoute
   ApiSandboxRunRoute: typeof ApiSandboxRunRoute
   ApiTasksRunRoute: typeof ApiTasksRunRoute
@@ -706,6 +745,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/composio-webhook': {
+      id: '/api/composio-webhook'
+      path: '/api/composio-webhook'
+      fullPath: '/api/composio-webhook'
+      preLoaderRoute: typeof ApiComposioWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/documents': {
       id: '/api/documents'
       path: '/api/documents'
@@ -746,6 +792,13 @@ declare module '@tanstack/react-router' {
       path: '/api/n8n-connection'
       fullPath: '/api/n8n-connection'
       preLoaderRoute: typeof ApiN8nConnectionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/n8n-relay': {
+      id: '/api/n8n-relay'
+      path: '/api/n8n-relay'
+      fullPath: '/api/n8n-relay'
+      preLoaderRoute: typeof ApiN8nRelayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/skills': {
@@ -809,6 +862,13 @@ declare module '@tanstack/react-router' {
       path: '/api/cron/daily'
       fullPath: '/api/cron/daily'
       preLoaderRoute: typeof ApiCronDailyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/cron/n8n-credentials': {
+      id: '/api/cron/n8n-credentials'
+      path: '/api/cron/n8n-credentials'
+      fullPath: '/api/cron/n8n-credentials'
+      preLoaderRoute: typeof ApiCronN8nCredentialsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/cron/purge-files': {
@@ -975,12 +1035,14 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SupplierOrdersRoute: SupplierOrdersRoute,
   ApiChatRoute: ApiChatRoute,
+  ApiComposioWebhookRoute: ApiComposioWebhookRoute,
   ApiDocumentsRoute: ApiDocumentsRouteWithChildren,
   ApiFxRoute: ApiFxRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiImportMemoryRoute: ApiImportMemoryRoute,
   ApiModelKeysRoute: ApiModelKeysRoute,
   ApiN8nConnectionRoute: ApiN8nConnectionRoute,
+  ApiN8nRelayRoute: ApiN8nRelayRoute,
   ApiSkillsRoute: ApiSkillsRouteWithChildren,
   ApiTranscribeRoute: ApiTranscribeRoute,
   ApiAttachmentsFinishRoute: ApiAttachmentsFinishRoute,
@@ -990,6 +1052,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBillingPaystackWebhookRoute: ApiBillingPaystackWebhookRoute,
   ApiConnectorsTelegramRoute: ApiConnectorsTelegramRouteWithChildren,
   ApiCronDailyRoute: ApiCronDailyRoute,
+  ApiCronN8nCredentialsRoute: ApiCronN8nCredentialsRoute,
   ApiCronPurgeFilesRoute: ApiCronPurgeFilesRoute,
   ApiSandboxRunRoute: ApiSandboxRunRoute,
   ApiTasksRunRoute: ApiTasksRunRoute,

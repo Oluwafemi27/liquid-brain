@@ -14,11 +14,11 @@ export class N8nNotConnectedError extends Error {
 }
 
 interface N8nRequestOptions {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
 }
 
-async function n8nRequest<T>(
+export async function n8nRequest<T>(
   userId: string,
   path: string,
   opts: N8nRequestOptions = {},
@@ -90,6 +90,35 @@ export async function deployN8nWorkflow(
     active: created.active,
     updatedAt: created.updatedAt,
   };
+}
+
+/** Creates a credential on the owner's n8n (POST /credentials). Returns its id. */
+export async function createN8nCredential(
+  userId: string,
+  cred: { name: string; type: string; data: Record<string, unknown> },
+): Promise<{ id: string; name: string; type: string }> {
+  return n8nRequest(userId, "/credentials", { method: "POST", body: cred });
+}
+
+export async function deleteN8nCredential(userId: string, credentialId: string): Promise<void> {
+  await n8nRequest(userId, `/credentials/${credentialId}`, { method: "DELETE" });
+}
+
+/** Replaces a workflow (PUT /workflows/:id). Only name, nodes, connections and settings are sent. */
+export async function updateN8nWorkflow(
+  userId: string,
+  n8nWorkflowId: string,
+  wf: Record<string, unknown>,
+): Promise<void> {
+  await n8nRequest(userId, `/workflows/${n8nWorkflowId}`, {
+    method: "PUT",
+    body: {
+      name: wf["name"],
+      nodes: wf["nodes"],
+      connections: wf["connections"],
+      settings: (wf["settings"] as object | undefined) ?? {},
+    },
+  });
 }
 
 export async function activateN8nWorkflow(userId: string, n8nWorkflowId: string): Promise<void> {

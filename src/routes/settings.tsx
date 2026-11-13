@@ -161,7 +161,7 @@ function SettingsPage() {
                   {user?.name || "Your profile"}
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  {user?.email ? `${user.email} · ` : ""}View and edit profile
+                  {user?.email ?? "View your profile"}
                 </span>
               </span>
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -169,8 +169,8 @@ function SettingsPage() {
           </Link>
         ) : null}
 
-        <div className="grid gap-6 lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-14">
-          <nav aria-label="Settings sections" className="lg:sticky lg:top-8 lg:self-start">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-14">
+          <nav aria-label="Settings sections" className="min-w-0 lg:sticky lg:top-8 lg:self-start">
             <ul className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0">
               {tabs.map(({ id, label, icon: Icon }) => (
                 <li key={id} className="shrink-0">
@@ -193,7 +193,7 @@ function SettingsPage() {
             </ul>
           </nav>
 
-          <div className="min-w-0 max-w-2xl">
+          <div className="min-w-0 w-full max-w-2xl [&_*]:min-w-0">
             {banner ? (
               <GlassCard
                 hover={false}

@@ -95,7 +95,7 @@ function ProfilePage() {
             style={{ background: "var(--gradient-accent)" }}
             aria-hidden
           />
-          <div className="relative grid gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,18rem)] sm:items-center">
+          <div className="relative grid grid-cols-[minmax(0,1fr)] gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,18rem)] sm:items-center">
             <div className="flex min-w-0 items-center gap-4 sm:gap-5">
               <div
                 className="grid h-16 w-16 shrink-0 place-items-center rounded-full text-2xl font-semibold text-background sm:h-20 sm:w-20 sm:text-3xl"
@@ -137,7 +137,7 @@ function ProfilePage() {
           </div>
         </header>
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-12">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-12">
           <main className="min-w-0">
             <ProfileSection />
           </main>
