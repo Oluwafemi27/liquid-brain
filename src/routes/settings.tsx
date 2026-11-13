@@ -4,10 +4,19 @@ import { IntegrationAccess } from "@/components/aduf/integration-access";
 import { SafetyPanel } from "@/components/aduf/safety-panel";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { BadgeCheck, Bell, Blocks, LogOut, Plug, ShieldCheck, UserRound } from "lucide-react";
+import {
+  BadgeCheck,
+  ChevronRight,
+  KeyRound,
+  Lock,
+  Plug,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell, PageHeader } from "@/components/aduf/app-shell";
 import { GlassCard } from "@/components/aduf/liquid";
+import { cn } from "@/lib/utils";
 import { ModelKeysPanel } from "@/components/aduf/model-keys-panel";
 import { N8nConnectionPanel } from "@/components/aduf/n8n-connection-panel";
 import { SkillsPanel } from "@/components/aduf/skills-panel";
@@ -19,13 +28,12 @@ import { checkIsAdminFn } from "@/lib/server-fns";
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
-      { title: "Settings & Integrations — ADUF AI" },
+      { title: "Settings — ADUF AI" },
       {
         name: "description",
-        content:
-          "Manage your ADUF profile, autonomy level and connected integrations — commerce, payments, ads and messaging in one place.",
+        content: "Your profile, plan, connected apps, safety rules and privacy in one place.",
       },
-      { property: "og:title", content: "Settings & Integrations — ADUF AI" },
+      { property: "og:title", content: "Settings — ADUF AI" },
       {
         property: "og:description",
         content: "Control how much ADUF can act on its own, and what it is connected to.",
@@ -52,22 +60,41 @@ const CONNECTOR_ERROR_COPY: Record<string, string> = {
   unknown_provider: "Unknown integration.",
 };
 
+type TabId = "plan" | "connections" | "safety" | "privacy" | "admin";
+const TABS: { id: TabId; label: string; icon: LucideIcon; adminOnly?: true }[] = [
+  { id: "plan", label: "Plan & credits", icon: BadgeCheck },
+  { id: "connections", label: "Connections", icon: Plug },
+  { id: "safety", label: "Safety", icon: ShieldCheck },
+  { id: "privacy", label: "Data & privacy", icon: Lock },
+  { id: "admin", label: "Workspace admin", icon: KeyRound, adminOnly: true },
+];
+
+function tabFromLocation(): TabId {
+  if (typeof window === "undefined") return "plan";
+  const q = new URLSearchParams(window.location.search);
+  // Coming back from a connector sign-in, or a deep link to the Telegram box.
+  if (q.get("connected") || q.get("connectorError") || window.location.hash === "#telegram-panel")
+    return "connections";
+  const h = window.location.hash.slice(1);
+  return TABS.some((t) => t.id === h) ? (h as TabId) : "plan";
+}
+
 function SettingsPage() {
-  const {
-    sources,
-    connectorsConfigured: configured,
-    setSourceConnected,
-    userName,
-    setUserName,
-  } = useAduf();
-  const { accessToken, status, signOut } = useAuth();
+  const { setSourceConnected } = useAduf();
+  const { accessToken, status, user } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [tab, setTab] = useState<TabId>("plan");
   const [banner, setBanner] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
-  // Only shows the Admin Panel link if this signed-in user is actually on
-  // the server-side admin allowlist — the link's absence isn't security by
-  // itself (the /admin route re-checks server-side too), just avoids
-  // showing a dead end to everyone else.
+  useEffect(() => setTab(tabFromLocation()), []);
+
+  function pick(id: TabId) {
+    setTab(id);
+    window.history.replaceState({}, "", `${window.location.pathname}#${id}`);
+  }
+
+  // The Admin tab only shows for people on the server-side admin allowlist (the /admin route and every
+  // admin call re-check on the server; hiding the tab just avoids a dead end for everyone else).
   useEffect(() => {
     if (status !== "signed-in" || !accessToken) {
       setIsAdmin(false);
@@ -103,129 +130,136 @@ function SettingsPage() {
       return;
     }
     if (connected || error) {
-      window.history.replaceState({}, "", window.location.pathname);
+      window.history.replaceState({}, "", `${window.location.pathname}#connections`);
     }
   }, [setSourceConnected]);
 
+  const tabs = TABS.filter((t) => !t.adminOnly || isAdmin);
+  const active = tabs.some((t) => t.id === tab) ? tab : "plan";
+
   return (
     <AppShell>
-      <div className="mx-auto w-full max-w-md px-4 pt-4 pb-24 lg:max-w-[1500px] lg:px-6 lg:py-8">
-        <PageHeader eyebrow="Settings" title="You & your stack" />
+      <div className="mx-auto w-full max-w-5xl px-4 pt-4 pb-24 lg:px-8 lg:py-10">
+        <PageHeader eyebrow="Settings" title="Settings" />
 
-        {isAdmin ? (
-          <Link to="/admin" className="mb-4 block">
-            <GlassCard className="flex items-center gap-3 p-4">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-cyan/15 text-cyan">
-                <ShieldCheck className="h-4.5 w-4.5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium">Admin Panel</p>
-                <p className="text-xs text-muted-foreground">
-                  Manage users, admins, and workspace-wide stats
-                </p>
-              </div>
+        {/* The profile is its own page; this card is the way in (most visible on a phone). */}
+        {status === "signed-in" ? (
+          <Link
+            to="/profile"
+            className="mb-8 block focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan lg:max-w-xl"
+          >
+            <GlassCard className="flex items-center gap-4 rounded-2xl p-4">
+              <span
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-full text-lg font-semibold text-background"
+                style={{ background: "var(--gradient-accent)" }}
+                aria-hidden
+              >
+                {(user?.name || user?.email || "?").slice(0, 1).toUpperCase()}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">
+                  {user?.name || "Your profile"}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {user?.email ? `${user.email} · ` : ""}View and edit profile
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
             </GlassCard>
           </Link>
         ) : null}
 
-        <Link
-          to="/connectors"
-          className="mb-4 block focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan"
-        >
-          <GlassCard className="flex items-center gap-4 rounded-2xl p-4">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/10">
-              <Plug className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Connect your apps</p>
-              <p className="text-xs text-muted-foreground">
-                Browse hundreds of apps, sign in once and let ADUF use them.
-              </p>
-            </div>
-            <span className="shrink-0 rounded-full bg-foreground px-4 py-1.5 text-xs font-medium text-background">
-              Open connectors
-            </span>
-          </GlassCard>
-        </Link>
+        <div className="grid gap-6 lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-14">
+          <nav aria-label="Settings sections" className="lg:sticky lg:top-8 lg:self-start">
+            <ul className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0">
+              {tabs.map(({ id, label, icon: Icon }) => (
+                <li key={id} className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => pick(id)}
+                    aria-current={active === id ? "page" : undefined}
+                    className={cn(
+                      "flex w-full items-center gap-2.5 whitespace-nowrap rounded-xl px-3.5 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-cyan",
+                      active === id
+                        ? "bg-white/10 font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                    {label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </nav>
 
-        {banner ? (
-          <GlassCard
-            hover={false}
-            className={`mb-4 min-h-16 rounded-2xl p-4 text-sm ${banner.kind === "success" ? "text-cyan" : "text-amber-400"}`}
-          >
-            {banner.text}
-          </GlassCard>
-        ) : null}
-
-        <div className="grid gap-4 sm:gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <div className="space-y-4">
-            <GlassCard hover={false} className="min-h-16 rounded-2xl p-4 text-center sm:p-5">
-              <div
-                className="mx-auto grid h-12 w-12 place-items-center rounded-full sm:h-16 sm:w-16"
-                style={{ background: "var(--gradient-accent)" }}
-              >
-                <UserRound className="h-5 w-5 text-background sm:h-7 sm:w-7" />
-              </div>
-              <input
-                value={userName}
-                onChange={(e) => setUserName(e.target.value)}
-                placeholder="Add your name"
-                className="mt-3 w-full rounded-full bg-white/8 px-3 py-2 text-center text-base font-semibold outline-none placeholder:text-base placeholder:font-normal placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-ring sm:text-lg"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">Owner</p>
-              {status === "signed-in" ? (
-                <button
-                  type="button"
-                  onClick={() => void signOut()}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-border py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-red-400/40 hover:bg-red-400/10 hover:text-red-400"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  Sign out
-                </button>
-              ) : null}
-            </GlassCard>
-
-            {[
-              { icon: ShieldCheck, label: "Autonomy", value: "Not set" },
-              { icon: Bell, label: "Alerts", value: "Not set" },
-              { icon: BadgeCheck, label: "Plan", value: "Free" },
-            ].map(({ icon: Icon, label, value }, i) => (
+          <div className="min-w-0 max-w-2xl">
+            {banner ? (
               <GlassCard
-                key={label}
-                delay={i * 0.05}
-                className="flex min-h-16 items-center gap-3 rounded-2xl p-4"
+                hover={false}
+                className={`mb-6 rounded-2xl p-4 text-sm ${banner.kind === "success" ? "text-cyan" : "text-amber-400"}`}
               >
-                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10">
-                  <Icon className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-                  <p className="truncate text-sm">{value}</p>
-                </div>
+                {banner.text}
               </GlassCard>
-            ))}
-          </div>
+            ) : null}
 
-          <div className="min-w-0 space-y-5 sm:space-y-8">
-            <div>
-              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <Blocks className="h-4 w-4" /> Connections
-              </h2>
-              <N8nConnectionPanel />
-              {isAdmin ? (
-                <div id="telegram-panel" className="mt-4">
-                  <TelegramConnectionPanel
-                    onChange={(connected) => setSourceConnected("telegram", connected)}
-                  />
-                </div>
-              ) : null}
-            </div>
+            {active === "plan" ? <PlanSummaryCard /> : null}
 
-            <PlanSummaryCard />
-            <SafetyPanel />
-            {isAdmin ? <ModelKeysPanel /> : null}
-            {isAdmin ? <SkillsPanel /> : null}
-            <DataPrivacyPanel />
+            {active === "connections" ? (
+              <div className="space-y-6">
+                <Link
+                  to="/connectors"
+                  className="block focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan"
+                >
+                  <GlassCard className="flex items-center gap-4 rounded-2xl p-4">
+                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/10">
+                      <Plug className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold">Connect your apps</p>
+                      <p className="text-xs text-muted-foreground">
+                        Browse hundreds of apps, sign in once and let ADUF use them.
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-foreground px-4 py-1.5 text-xs font-medium text-background">
+                      Open
+                    </span>
+                  </GlassCard>
+                </Link>
+                <N8nConnectionPanel />
+                {isAdmin ? (
+                  <div id="telegram-panel">
+                    <TelegramConnectionPanel
+                      onChange={(connected) => setSourceConnected("telegram", connected)}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {active === "safety" ? <SafetyPanel /> : null}
+
+            {active === "privacy" ? <DataPrivacyPanel /> : null}
+
+            {active === "admin" && isAdmin ? (
+              <div className="space-y-6">
+                <Link to="/admin" className="block">
+                  <GlassCard className="flex items-center gap-3 rounded-2xl p-4">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-cyan/15 text-cyan">
+                      <ShieldCheck className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">Admin Panel</p>
+                      <p className="text-xs text-muted-foreground">
+                        Users, admins, billing and workspace-wide stats
+                      </p>
+                    </div>
+                  </GlassCard>
+                </Link>
+                <ModelKeysPanel />
+                <SkillsPanel />
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

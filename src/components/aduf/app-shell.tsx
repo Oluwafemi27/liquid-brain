@@ -9,7 +9,6 @@ import {
   Plug,
   Settings,
   Target,
-  UserRound,
   Waves,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -41,7 +40,6 @@ const nav = [
   { to: "/connectors", label: "Connectors", icon: Plug },
   { to: "/supplier-orders", label: "Suppliers", icon: PackageCheck },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/profile", label: "Profile", icon: UserRound },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -50,8 +48,7 @@ const mobileNav = nav.filter(
     n.label !== "Analytics" &&
     n.label !== "Notifications" &&
     n.label !== "Suppliers" &&
-    n.label !== "Connectors" &&
-    n.label !== "Settings",
+    n.label !== "Connectors",
 );
 
 function initials(name: string) {
