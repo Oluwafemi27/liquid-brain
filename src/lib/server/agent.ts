@@ -67,6 +67,56 @@ const proposedActionSchema = z.discriminatedUnion("type", [
     reasoning: z.string().min(1).max(400),
   }),
   z.object({
+    type: z.literal("update_goal"),
+    goalId: z.string().uuid(),
+    title: z.string().min(1).max(120).optional(),
+    target: z.number().positive().optional(),
+    currency: z.string().max(3).optional(),
+    current: z.number().min(0).optional(),
+    reasoning: z.string().min(1).max(400),
+  }),
+  z.object({
+    type: z.literal("delete_goal"),
+    goalId: z.string().uuid(),
+    reasoning: z.string().min(1).max(400),
+  }),
+  z.object({
+    type: z.literal("update_event"),
+    eventId: z.string().uuid(),
+    title: z.string().min(1).max(120).optional(),
+    day: z.enum(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]).optional(),
+    startTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+      .optional(),
+    endTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+      .optional(),
+    reasoning: z.string().min(1).max(400),
+  }),
+  z.object({
+    type: z.literal("delete_event"),
+    eventId: z.string().uuid(),
+    reasoning: z.string().min(1).max(400),
+  }),
+  z.object({
+    type: z.literal("ui_open_page"),
+    page: z.enum([
+      "goals",
+      "schedule",
+      "automations",
+      "connectors",
+      "notifications",
+      "memory",
+      "analytics",
+      "billing",
+      "profile",
+      "settings",
+    ]),
+    reasoning: z.string().min(1).max(400),
+  }),
+  z.object({
     type: z.literal("toggle_automation"),
     channelId: z.enum(CHANNEL_IDS),
     enabled: z.boolean(),
@@ -288,6 +338,15 @@ real, specific finding — never invent findings to fill the shape, and never
 attach it to a reply that's just conversation, a clarifying question, or a
 single follow-up answer.
 
+=== Confirm with options (default behaviour) ===
+The owner wants to confirm things with you instead of typing. So whenever a request has more than one
+reasonable reading, or you are about to do or recommend something that depends on a choice they haven't made
+(which goal, which day or time, how much, which channel, what scope), attach a "question" with 2-6 short,
+concrete options (plus an option such as "Something else" when it fits) and make the "reply" one short line
+that frames it. Do this before proposing any change to goals, the schedule, automations or connected apps:
+first confirm the details with options, then propose. Pure facts, greetings and replies that are already
+unambiguous need no question; do not ask for things you can read from their data or setup profile.
+
 === Stay accurate: ask before you diagnose ===
 A generic-sounding audit is worse than useless — it's actively misleading.
 Before producing (or substantially updating) an analysis, make sure you
@@ -299,8 +358,8 @@ know — do NOT guess. Attach a "question" with 2-6 concrete, mutually
 exclusive options instead of a free-text ask, and hold off on "analysis"
 until you have what you need. This applies throughout the conversation, not
 just the first message — keep narrowing with questions whenever precision
-would otherwise suffer. Most short/simple replies still need no question at
-all; use it when it actually changes what a good answer looks like.
+would otherwise suffer. Confirming with options is the default for requests that
+need a choice (see above); only greetings and unambiguous factual answers go without.
 
 When the request calls for an actual deliverable — a report, a draft
 document, a written plan, a document to send someone — rather than just a
@@ -336,6 +395,16 @@ same reply. Shapes that exist today (two more — create_reminder and change_ad_
   (bookings, signups, etc). "reasoning" is one short sentence the owner
   reads on the approval card explaining why this goal, shown to them, not
   hidden reasoning.
+- {"type": "update_goal", "goalId": string, "title"?, "target"?, "currency"?, "current"?, "reasoning": string} —
+  edit one of the owner's goals (current = progress so far). Use ONLY a goalId from the
+  "Your goals and schedule" list below; send only the fields that change.
+- {"type": "delete_goal", "goalId": string, "reasoning": string} — remove a goal the owner asked to remove.
+- {"type": "update_event", "eventId": string, "title"?, "day"?, "startTime"?, "endTime"?, "reasoning": string} —
+  move or rename an event on their Schedule. Use ONLY an eventId from the list below.
+- {"type": "delete_event", "eventId": string, "reasoning": string} — remove a Schedule event they asked to remove.
+- {"type": "ui_open_page", "page": string, "reasoning": string} — when the owner needs a page (to review, change
+  or connect something you can't do yourself), put a button for it in the chat. Runs at once, changes nothing.
+  To ADD a schedule item use create_reminder; to ADD a goal use create_goal. Never invent ids.
 - {"type": "toggle_automation", "channelId": "website"|"whatsapp"|"crm"|"payments"|"ads"|"email", "enabled": boolean, "reasoning": string} —
   propose this to turn one of the 6 built-in channel automations on or off
   with a clear reason.
@@ -468,7 +537,7 @@ Dropshipping actions (only when the "Dropshipping" skill tools are listed at the
 
 Respond with ONLY a single JSON object, no markdown fences, no prose outside
 it, matching exactly:
-{"reply": string, "question": {"prompt": string, "multi": boolean, "options": [{"id": string, "label": string, "value": string}]} | null, "document": {"filename": string, "format": "txt"|"md"|"docx"|"pdf", "content": string} | null, "analysis": {"summary": string, "findings": [{"area": "visibility"|"credibility"|"customer_journey"|"conversion"|"sales"|"retention"|"operations"|"local_presence"|"search_ai_visibility", "problem": string, "severity": "low"|"medium"|"high"|"critical", "rootCauses": string[], "opportunities": string[], "recommendedActions": string[], "estimatedImpact": string, "automationPossible": boolean, "automationNotes": string, "expertRequired": boolean, "expertType": string}]} | null, "proposedAction": {"type": "create_goal", "title": string, "target": number, "currency": string, "reasoning": string} | {"type": "toggle_automation", "channelId": "website"|"whatsapp"|"crm"|"payments"|"ads"|"email", "enabled": boolean, "reasoning": string} | {"type": "create_automation", "name": string, "trigger": string, "action": string, "goalTitle": string, "reasoning": string} | {"type": "deploy_n8n_workflow", "name": string, "templateId": string, "buildBrief": string, "goalTitle": string, "reasoning": string} | {"type": "dropship_create_product", "title": string, "description": string, "currency": string, "price": number, "productCost": number, "shippingCost": number, "otherCostPerOrder": number, "refundRate": number, "supplierUrl": string, "supplierSku": string, "reasoning": string} | {"type": "dropship_update_price", "productId": string, "variantId": string, "currency": string, "newPrice": number, "reasoning": string} | {"type": "dropship_place_supplier_order", "storeOrderId": string, "supplier": string, "logisticName": string, "fromCountryCode": string, "note": string, "reasoning": string} | {"type": "composio_run_tool", "toolkit": string, "toolSlug": string, "arguments": object, "reasoning": string} | {"type": "dropship_update_supplier_order", "orderId": string, "status": string, "supplierRef": string, "trackingNumber": string, "carrier": string, "expectedDelivery": string, "note": string, "reasoning": string} | null, "toolCall": {"type": "run_code", "language": "python"|"javascript"|"bash", "code": string, "purpose": string} | {"type": "search_n8n_templates", "query": string} | {"type": "search_n8n_docs", "query": string} | {"type": "skill_tool", "name": string, "input": object} | {"type": "delegate", "tasks": [{"id": string, "role": string, "goal": string, "context": string}]} | null}`;
+{"reply": string, "question": {"prompt": string, "multi": boolean, "options": [{"id": string, "label": string, "value": string}]} | null, "document": {"filename": string, "format": "txt"|"md"|"docx"|"pdf", "content": string} | null, "analysis": {"summary": string, "findings": [{"area": "visibility"|"credibility"|"customer_journey"|"conversion"|"sales"|"retention"|"operations"|"local_presence"|"search_ai_visibility", "problem": string, "severity": "low"|"medium"|"high"|"critical", "rootCauses": string[], "opportunities": string[], "recommendedActions": string[], "estimatedImpact": string, "automationPossible": boolean, "automationNotes": string, "expertRequired": boolean, "expertType": string}]} | null, "proposedAction": {"type": "create_goal", "title": string, "target": number, "currency": string, "reasoning": string} | {"type": "update_goal", "goalId": string, "title": string, "target": number, "currency": string, "current": number, "reasoning": string} | {"type": "delete_goal", "goalId": string, "reasoning": string} | {"type": "update_event", "eventId": string, "title": string, "day": "Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat"|"Sun", "startTime": "HH:MM", "endTime": "HH:MM", "reasoning": string} | {"type": "delete_event", "eventId": string, "reasoning": string} | {"type": "ui_open_page", "page": "goals"|"schedule"|"automations"|"connectors"|"notifications"|"memory"|"analytics"|"billing"|"profile"|"settings", "reasoning": string} | {"type": "toggle_automation", "channelId": "website"|"whatsapp"|"crm"|"payments"|"ads"|"email", "enabled": boolean, "reasoning": string} | {"type": "create_automation", "name": string, "trigger": string, "action": string, "goalTitle": string, "reasoning": string} | {"type": "deploy_n8n_workflow", "name": string, "templateId": string, "buildBrief": string, "goalTitle": string, "reasoning": string} | {"type": "dropship_create_product", "title": string, "description": string, "currency": string, "price": number, "productCost": number, "shippingCost": number, "otherCostPerOrder": number, "refundRate": number, "supplierUrl": string, "supplierSku": string, "reasoning": string} | {"type": "dropship_update_price", "productId": string, "variantId": string, "currency": string, "newPrice": number, "reasoning": string} | {"type": "dropship_place_supplier_order", "storeOrderId": string, "supplier": string, "logisticName": string, "fromCountryCode": string, "note": string, "reasoning": string} | {"type": "composio_run_tool", "toolkit": string, "toolSlug": string, "arguments": object, "reasoning": string} | {"type": "dropship_update_supplier_order", "orderId": string, "status": string, "supplierRef": string, "trackingNumber": string, "carrier": string, "expectedDelivery": string, "note": string, "reasoning": string} | null, "toolCall": {"type": "run_code", "language": "python"|"javascript"|"bash", "code": string, "purpose": string} | {"type": "search_n8n_templates", "query": string} | {"type": "search_n8n_docs", "query": string} | {"type": "skill_tool", "name": string, "input": object} | {"type": "delegate", "tasks": [{"id": string, "role": string, "goal": string, "context": string}]} | null}`;
 
 /** Max code-execution round trips inside a single reply — bounds latency
  *  and cost; almost every reply that needs a tool call needs it once. */
@@ -722,9 +791,34 @@ function parseAgentReply(text: string): AgentReply {
   try {
     parsedJson = JSON.parse(stripCodeFence(text));
   } catch {
-    throw new Error(
-      `Reply was not valid JSON (got: ${text.slice(0, 200)}). Respond with ONLY the JSON object.`,
-    );
+    // Models often wrap the JSON in a sentence. Take the outermost {...} before giving up.
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        parsedJson = JSON.parse(text.slice(start, end + 1));
+      } catch {
+        /* handled below */
+      }
+    }
+    if (parsedJson === undefined) {
+      // No JSON at all but a real answer: show it. Re-running the whole reply (tools included) to get
+      // the same words in braces is the slowest possible fix.
+      const plain = text.trim();
+      if (plain.length > 0 && !plain.startsWith("{")) {
+        return {
+          reply: plain,
+          question: null,
+          document: null,
+          analysis: null,
+          proposedAction: null,
+          toolCall: null,
+        } as AgentReply;
+      }
+      throw new Error(
+        `Reply was not valid JSON (got: ${text.slice(0, 200)}). Respond with ONLY the JSON object.`,
+      );
+    }
   }
 
   const parsed = agentReplySchema.safeParse(parsedJson);

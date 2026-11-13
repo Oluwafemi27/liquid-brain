@@ -21,6 +21,7 @@ import {
   startCheckout,
   syncPaystackPlans,
   updateBillingSettings,
+  createPack,
   updatePack,
   updatePlan,
   verifyByReference,
@@ -95,6 +96,8 @@ import {
 } from "@/lib/server/goals";
 import {
   fetchChatHistory as fetchChatHistoryImpl,
+  setMessageFeedback,
+  truncateFromMessage,
   listChatSessions as listChatSessionsImpl,
 } from "@/lib/server/chat-history";
 import { getSurvey, saveSurvey, verifyAccessToken, type BusinessSurvey } from "@/lib/server/survey";
@@ -273,6 +276,29 @@ export const fetchChatHistoryFn = createServerFn({ method: "POST" })
     return fetchChatHistoryImpl(user.id, data.sessionId);
   });
 
+export const rateMessageFn = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      accessToken: string | null;
+      sessionId: string;
+      text: string;
+      rating: "up" | "down" | null;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return { ok: false };
+    return { ok: await setMessageFeedback(user.id, data.sessionId, data.text, data.rating) };
+  });
+
+export const truncateChatFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null; sessionId: string; text: string }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return { ok: false };
+    return { ok: await truncateFromMessage(user.id, data.sessionId, data.text) };
+  });
+
 export const listChatSessionsFn = createServerFn({ method: "POST" })
   .validator((data: { accessToken: string | null }) => data)
   .handler(async ({ data }) => {
@@ -307,6 +333,16 @@ export const fetchSurveyStatus = createServerFn({ method: "POST" })
     const survey = await getSurvey(user.id);
     if (survey === null) return { status: "unconfigured" as const };
     return { status: survey ? ("done" as const) : ("pending" as const) };
+  });
+
+/** The signed-in user's own survey answers, for their profile page. */
+export const fetchMySurveyFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return { survey: null as BusinessSurvey | null };
+    const survey = await getSurvey(user.id);
+    return { survey: survey ?? null };
   });
 
 export const submitSurvey = createServerFn({ method: "POST" })
@@ -1088,6 +1124,7 @@ export const adminUpdatePackFn = createServerFn({ method: "POST" })
       patch: {
         name?: string;
         tokens?: number;
+        bonusTokens?: number;
         priceNgn?: number;
         priceUsd?: number;
         active?: boolean;
@@ -1102,11 +1139,37 @@ export const adminUpdatePackFn = createServerFn({ method: "POST" })
     }),
   );
 
+export const adminCreatePackFn = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      accessToken: string | null;
+      pack: {
+        name: string;
+        tokens: number;
+        bonusTokens: number;
+        priceNgn: number;
+        priceUsd: number;
+      };
+    }) => data,
+  )
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      await adminOnly(data.accessToken);
+      await createPack(data.pack);
+      return {};
+    }),
+  );
+
 export const adminBillingSettingsFn = createServerFn({ method: "POST" })
   .validator(
     (data: {
       accessToken: string | null;
-      patch: { trialEnabled?: boolean; trialDays?: number; trialPlan?: string };
+      patch: {
+        trialEnabled?: boolean;
+        trialDays?: number;
+        trialPlan?: string;
+        tokensPerCredit?: number;
+      };
     }) => data,
   )
   .handler(async ({ data }) =>

@@ -10,7 +10,19 @@ export interface AgentSkill {
   enabled: boolean;
 }
 
+let skillsCache: { at: number; rows: AgentSkill[] } | null = null;
+const SKILLS_TTL_MS = 30_000;
+
+/** The skill list changes only when an admin toggles one, so it is kept for 30 seconds instead of being
+ *  fetched from the database on every chat message. */
 export async function listSkills(): Promise<AgentSkill[]> {
+  if (skillsCache && Date.now() - skillsCache.at < SKILLS_TTL_MS) return skillsCache.rows;
+  const rows = await loadSkills();
+  if (rows.length) skillsCache = { at: Date.now(), rows };
+  return rows;
+}
+
+async function loadSkills(): Promise<AgentSkill[]> {
   const db = getSupabaseAdmin();
   if (!db) return [];
   const { data, error } = await db
@@ -41,6 +53,7 @@ export async function setSkillEnabled(id: string, enabled: boolean): Promise<voi
     .eq("workspace_id", DEFAULT_WORKSPACE_ID)
     .eq("id", id);
   if (error) throw new Error(`Failed to update skill: ${error.message}`);
+  skillsCache = null;
 }
 
 /** Builds the block of instructions folded into the agent's system prompt

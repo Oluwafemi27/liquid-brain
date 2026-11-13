@@ -13,6 +13,7 @@ interface ChatMessageRow {
   analysis: ChatMessage["analysis"] | null;
   proposed_action: ChatMessage["proposedAction"] | null;
   sources: ChatMessage["sources"] | null;
+  feedback: "up" | "down" | null;
   created_at: string;
 }
 
@@ -28,6 +29,7 @@ function fromRow(row: ChatMessageRow): ChatMessage {
     analysis: row.analysis ?? undefined,
     proposedAction: row.proposed_action ?? undefined,
     sources: row.sources ?? undefined,
+    feedback: row.feedback ?? undefined,
   };
 }
 
@@ -44,7 +46,7 @@ export async function fetchChatHistory(userId: string, sessionId: string): Promi
   const { data, error } = await db
     .from("chat_messages")
     .select(
-      "id, role, text, question, answered_values, trace, attachments, analysis, proposed_action, sources, created_at",
+      "id, role, text, question, answered_values, trace, attachments, analysis, proposed_action, sources, feedback, created_at",
     )
     .eq("user_id", userId)
     .eq("session_id", sessionId)
@@ -54,6 +56,64 @@ export async function fetchChatHistory(userId: string, sessionId: string): Promi
     return [];
   }
   return (data ?? []).map((row) => fromRow(row as ChatMessageRow));
+}
+
+/** Saves a thumbs up/down on the newest reply in this session with exactly this text (null clears it).
+ *  Scoped to the owner, so nobody can rate or read another account's messages. */
+export async function setMessageFeedback(
+  userId: string,
+  sessionId: string,
+  text: string,
+  rating: "up" | "down" | null,
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  if (!db || !sessionId || !text) return false;
+  const { data } = await db
+    .from("chat_messages")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("session_id", sessionId)
+    .eq("role", "aduf")
+    .eq("text", text)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return false;
+  const { error } = await db
+    .from("chat_messages")
+    .update({ feedback: rating })
+    .eq("id", data["id"] as string)
+    .eq("user_id", userId);
+  return !error;
+}
+
+/** Editing an earlier question rewrites the conversation from that point: removes the user message with
+ *  this text (the newest one) and everything after it, so a reload doesn't bring the old branch back. */
+export async function truncateFromMessage(
+  userId: string,
+  sessionId: string,
+  text: string,
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  if (!db || !sessionId || !text) return false;
+  const { data } = await db
+    .from("chat_messages")
+    .select("created_at")
+    .eq("user_id", userId)
+    .eq("session_id", sessionId)
+    .eq("role", "user")
+    .eq("text", text)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return false;
+  const { error } = await db
+    .from("chat_messages")
+    .delete()
+    .eq("user_id", userId)
+    .eq("session_id", sessionId)
+    .gte("created_at", data["created_at"] as string);
+  return !error;
 }
 
 /** Distinct chat sessions belonging to this user, most recent first, each

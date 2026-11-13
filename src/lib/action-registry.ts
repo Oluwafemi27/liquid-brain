@@ -6,6 +6,11 @@ import type { ActionRisk, ActionTier } from "@/lib/aduf-types";
 export type ActionType =
   | "create_reminder"
   | "create_goal"
+  | "update_goal"
+  | "delete_goal"
+  | "update_event"
+  | "delete_event"
+  | "ui_open_page"
   | "toggle_automation"
   | "create_automation"
   | "deploy_n8n_workflow"
@@ -44,6 +49,46 @@ export const ACTIONS: Record<ActionType, ActionDef> = {
     baseTier: "approve",
     undoHours: 24,
     undoNote: "Deletes the goal.",
+  },
+  update_goal: {
+    type: "update_goal",
+    label: "Edit a goal",
+    plain: "Changing a goal's title, target or progress",
+    baseTier: "approve",
+    undoHours: 24,
+    undoNote: "Puts the goal back how it was.",
+  },
+  delete_goal: {
+    type: "delete_goal",
+    label: "Delete a goal",
+    plain: "Deleting a goal",
+    baseTier: "approve",
+    undoHours: null,
+    undoNote: "A deleted goal can't be brought back.",
+  },
+  update_event: {
+    type: "update_event",
+    label: "Edit a Schedule event",
+    plain: "Moving or renaming events on your Schedule",
+    baseTier: "approve",
+    undoHours: 24,
+    undoNote: "Puts the event back how it was.",
+  },
+  delete_event: {
+    type: "delete_event",
+    label: "Delete a Schedule event",
+    plain: "Removing events from your Schedule",
+    baseTier: "approve",
+    undoHours: null,
+    undoNote: "A deleted event can't be brought back.",
+  },
+  ui_open_page: {
+    type: "ui_open_page",
+    label: "Open a page for you",
+    plain: "Pointing you to the right page (it never changes anything)",
+    baseTier: "auto",
+    undoHours: null,
+    undoNote: "Nothing changed, so there is nothing to undo.",
   },
   toggle_automation: {
     type: "toggle_automation",
@@ -135,6 +180,11 @@ export function riskFor(type: ActionType, params: Record<string, unknown>): Acti
   switch (type) {
     case "create_reminder":
     case "create_goal":
+    case "update_goal":
+    case "delete_goal":
+    case "update_event":
+    case "delete_event":
+    case "ui_open_page":
       return "internal";
     case "change_ad_budget":
       return "ads";

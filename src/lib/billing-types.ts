@@ -38,7 +38,10 @@ export interface Plan {
 export interface TokenPack {
   id: string;
   name: string;
+  /** Credits the pack gives. */
   tokens: number;
+  /** Extra credits given on top as a bonus (shown on the pack). */
+  bonusTokens: number;
   priceNgn: number;
   priceUsd: number;
   active: boolean;
@@ -120,11 +123,9 @@ export const planRank = (id: string) => PLAN_RANK[id] ?? 1;
 
 export const formatNgn = (n: number) => `₦${Math.round(n).toLocaleString("en-NG")}`;
 export const formatUsd = (n: number) => `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
+/** Credits are small whole numbers (20, 40, 80, 160), so show them as they are. */
 export function formatTokens(n: number): string {
-  const v = Math.max(0, Math.round(n));
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(v % 1_000_000 === 0 ? 0 : 1)}M`;
-  if (v >= 1_000) return `${(v / 1_000).toFixed(v % 1_000 === 0 ? 0 : 1)}K`;
-  return String(v);
+  return Math.max(0, Math.round(n)).toLocaleString("en-US");
 }
 
 /** Upper-cases and strips spaces/dashes-noise so "aduf-ab12 cd34" and "ADUF-AB12-CD34" match. */

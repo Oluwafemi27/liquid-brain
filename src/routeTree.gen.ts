@@ -19,6 +19,7 @@ import { Route as ConnectorsRouteImport } from './routes/connectors'
 import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as NotificationsRouteImport } from './routes/notifications'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SupplierOrdersRouteImport } from './routes/supplier-orders'
@@ -101,6 +102,11 @@ const MemoryRoute = MemoryRouteImport.update({
 const NotificationsRoute = NotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScheduleRoute = ScheduleRouteImport.update({
@@ -285,6 +291,7 @@ export interface FileRoutesByFullPath {
   '/goals': typeof GoalsRoute
   '/memory': typeof MemoryRoute
   '/notifications': typeof NotificationsRoute
+  '/profile': typeof ProfileRoute
   '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
   '/supplier-orders': typeof SupplierOrdersRoute
@@ -330,6 +337,7 @@ export interface FileRoutesByTo {
   '/goals': typeof GoalsRoute
   '/memory': typeof MemoryRoute
   '/notifications': typeof NotificationsRoute
+  '/profile': typeof ProfileRoute
   '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
   '/supplier-orders': typeof SupplierOrdersRoute
@@ -376,6 +384,7 @@ export interface FileRoutesById {
   '/goals': typeof GoalsRoute
   '/memory': typeof MemoryRoute
   '/notifications': typeof NotificationsRoute
+  '/profile': typeof ProfileRoute
   '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
   '/supplier-orders': typeof SupplierOrdersRoute
@@ -423,6 +432,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/memory'
     | '/notifications'
+    | '/profile'
     | '/schedule'
     | '/settings'
     | '/supplier-orders'
@@ -468,6 +478,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/memory'
     | '/notifications'
+    | '/profile'
     | '/schedule'
     | '/settings'
     | '/supplier-orders'
@@ -513,6 +524,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/memory'
     | '/notifications'
+    | '/profile'
     | '/schedule'
     | '/settings'
     | '/supplier-orders'
@@ -559,6 +571,7 @@ export interface RootRouteChildren {
   GoalsRoute: typeof GoalsRoute
   MemoryRoute: typeof MemoryRoute
   NotificationsRoute: typeof NotificationsRoute
+  ProfileRoute: typeof ProfileRoute
   ScheduleRoute: typeof ScheduleRoute
   SettingsRoute: typeof SettingsRoute
   SupplierOrdersRoute: typeof SupplierOrdersRoute
@@ -656,6 +669,13 @@ declare module '@tanstack/react-router' {
       path: '/notifications'
       fullPath: '/notifications'
       preLoaderRoute: typeof NotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/schedule': {
@@ -950,6 +970,7 @@ const rootRouteChildren: RootRouteChildren = {
   GoalsRoute: GoalsRoute,
   MemoryRoute: MemoryRoute,
   NotificationsRoute: NotificationsRoute,
+  ProfileRoute: ProfileRoute,
   ScheduleRoute: ScheduleRoute,
   SettingsRoute: SettingsRoute,
   SupplierOrdersRoute: SupplierOrdersRoute,

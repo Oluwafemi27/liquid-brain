@@ -287,8 +287,48 @@ export interface ProposedComposioRunAction {
   reasoning: string;
 }
 
+/** Edits and deletes of the owner's own goals and schedule events, and a button that opens a page. */
+export interface ProposedGoalEditAction {
+  type: "update_goal";
+  goalId: string;
+  title?: string | undefined;
+  target?: number | undefined;
+  currency?: string | undefined;
+  current?: number | undefined;
+  reasoning: string;
+}
+export interface ProposedGoalDeleteAction {
+  type: "delete_goal";
+  goalId: string;
+  reasoning: string;
+}
+export interface ProposedEventEditAction {
+  type: "update_event";
+  eventId: string;
+  title?: string | undefined;
+  day?: Weekday | undefined;
+  startTime?: string | undefined;
+  endTime?: string | undefined;
+  reasoning: string;
+}
+export interface ProposedEventDeleteAction {
+  type: "delete_event";
+  eventId: string;
+  reasoning: string;
+}
+export interface ProposedOpenPageAction {
+  type: "ui_open_page";
+  page: string;
+  reasoning: string;
+}
+
 export type ProposedAction = (
   | ProposedGoalAction
+  | ProposedGoalEditAction
+  | ProposedGoalDeleteAction
+  | ProposedEventEditAction
+  | ProposedEventDeleteAction
+  | ProposedOpenPageAction
   | ProposedAutomationAction
   | ProposedCreateAutomationAction
   | ProposedComposioRunAction
@@ -349,6 +389,8 @@ export interface ChatMessage {
   sources?: SourceRef[] | undefined;
   /** Data ADUF knows it is missing or that is out of date (shown so it never guesses silently). */
   dataGaps?: string[] | undefined;
+  /** The owner's thumbs up/down on this reply. */
+  feedback?: "up" | "down" | undefined;
 }
 
 export type AdufSeverity = "low" | "medium" | "high" | "critical";
@@ -596,7 +638,7 @@ export interface ActionRecord {
   status: ActionStatus;
   source: string;
   preview: ActionPreview | null;
-  result: { note?: string; manual?: boolean } | null;
+  result: { note?: string; manual?: boolean; navigate?: string } | null;
   overLimit: boolean;
   decidedBy: "auto" | "owner" | null;
   error: string | null;

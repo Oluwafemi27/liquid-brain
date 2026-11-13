@@ -24,11 +24,16 @@ import {
   listAutomations,
 } from "./automations";
 import { usdRates } from "./business-data";
-import { createGoal, deleteGoal } from "./goals";
+import { createGoal, deleteGoal, listGoals, updateGoal } from "./goals";
 import { createSafeModeDeployment } from "./n8n-deployments";
 import { requireFeature, withBilling } from "./billing";
 import { getOwnerSettings } from "./owner-settings";
-import { createScheduleEvent, deleteScheduleEvent } from "./schedule";
+import {
+  createScheduleEvent,
+  deleteScheduleEvent,
+  listScheduleEvents,
+  updateScheduleEvent,
+} from "./schedule";
 import { getSupabaseAdmin } from "./supabase";
 import {
   createProductSchema,
@@ -73,6 +78,19 @@ const CHANNEL_LABEL: Record<string, string> = {
   ads: "Ads",
   email: "Email",
 };
+const PAGES = [
+  "goals",
+  "schedule",
+  "automations",
+  "connectors",
+  "notifications",
+  "memory",
+  "analytics",
+  "billing",
+  "profile",
+  "settings",
+] as const;
+const PAGE_PATH: Record<string, string> = { automations: "/automations" };
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
 const SCHEMAS = {
@@ -87,6 +105,23 @@ const SCHEMAS = {
     target: z.number().positive(),
     currency: z.string().max(3).optional().default(""),
   }),
+  update_goal: z.object({
+    goalId: z.string().uuid(),
+    title: z.string().min(1).max(120).optional(),
+    target: z.number().positive().optional(),
+    currency: z.string().max(3).optional(),
+    current: z.number().min(0).optional(),
+  }),
+  delete_goal: z.object({ goalId: z.string().uuid() }),
+  update_event: z.object({
+    eventId: z.string().uuid(),
+    title: z.string().min(1).max(120).optional(),
+    day: z.enum(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]).optional(),
+    startTime: hhmm.optional(),
+    endTime: hhmm.optional(),
+  }),
+  delete_event: z.object({ eventId: z.string().uuid() }),
+  ui_open_page: z.object({ page: z.enum(PAGES) }),
   toggle_automation: z.object({ channelId: z.enum(CHANNELS), enabled: z.boolean() }),
   create_automation: z.object({
     name: z.string().min(1).max(80),
@@ -127,6 +162,16 @@ export function titleFor(type: ActionType, p: Record<string, unknown>): string {
   switch (type) {
     case "create_reminder":
       return `Add reminder “${p["title"]}” (${p["day"]} ${p["startTime"]})`;
+    case "update_goal":
+      return `Edit goal “${p["title"] ?? "(same name)"}”`;
+    case "delete_goal":
+      return "Delete a goal";
+    case "update_event":
+      return `Edit Schedule event${p["title"] ? ` “${p["title"]}”` : ""}`;
+    case "delete_event":
+      return "Delete a Schedule event";
+    case "ui_open_page":
+      return `Open your ${p["page"]} page`;
     case "create_goal":
       return `Create goal “${p["title"]}” — target ${p["currency"] ?? ""}${Number(p["target"]).toLocaleString()}`;
     case "toggle_automation":
@@ -233,6 +278,42 @@ async function buildPreview(
         unchanged: none,
         confidence: "high",
         confidenceNote: "Nothing to predict — it only adds a reminder.",
+        sources: [],
+      };
+    case "update_goal":
+    case "delete_goal":
+    case "update_event":
+    case "delete_event": {
+      const goal = type.endsWith("goal");
+      const id = String(p[goal ? "goalId" : "eventId"]);
+      const current = goal
+        ? (await listGoals(userId)).find((g) => g.id === id)
+        : (await listScheduleEvents(userId)).find((e) => e.id === id);
+      const name = current?.title ?? "(not found)";
+      const del = type.startsWith("delete");
+      const changes = Object.entries(p)
+        .filter(([k, v]) => k !== "goalId" && k !== "eventId" && v !== undefined)
+        .map(([k, v]) => `${k} → ${v}`);
+      return {
+        headline: del
+          ? `If you approve: “${name}” is removed from your ${goal ? "Goals" : "Schedule"}.`
+          : `If you approve: “${name}” is updated on your ${goal ? "Goals" : "Schedule"}.`,
+        effects: del ? [`Deletes “${name}”`] : changes,
+        unchanged: none,
+        confidence: current ? "high" : "low",
+        confidenceNote: current
+          ? "Only this one item changes."
+          : "I couldn't find that item. It may already be gone.",
+        sources: [],
+      };
+    }
+    case "ui_open_page":
+      return {
+        headline: `A button to open your ${p["page"]} page appears in the chat.`,
+        effects: ["Nothing is changed"],
+        unchanged: none,
+        confidence: "high",
+        confidenceNote: "Navigation only.",
         sources: [],
       };
     case "create_goal":
@@ -453,6 +534,69 @@ async function execute(
       if (!g) throw new Error("Couldn't create the goal.");
       return { result: { entityId: g.id, note: "Added to Goals." }, changed: true };
     }
+    case "update_goal": {
+      const id = String(p["goalId"]);
+      const before = (await listGoals(userId)).find((g) => g.id === id);
+      if (!before) throw new Error("That goal no longer exists.");
+      const { goalId: _g, ...patch } = p;
+      const g = await updateGoal(userId, id, patch as Parameters<typeof updateGoal>[2]);
+      if (!g) throw new Error("Couldn't edit the goal.");
+      return {
+        result: {
+          entityId: id,
+          prev: {
+            title: before.title,
+            target: before.target,
+            currency: before.currency,
+            current: before.current,
+          },
+          note: "Goal updated.",
+        },
+        changed: true,
+      };
+    }
+    case "delete_goal": {
+      const id = String(p["goalId"]);
+      if (!(await deleteGoal(userId, id))) throw new Error("Couldn't delete the goal.");
+      return { result: { note: "Goal deleted." }, changed: true };
+    }
+    case "update_event": {
+      const id = String(p["eventId"]);
+      const before = (await listScheduleEvents(userId)).find((e) => e.id === id);
+      if (!before) throw new Error("That event no longer exists.");
+      const { eventId: _e, ...patch } = p;
+      const ev = await updateScheduleEvent(
+        userId,
+        id,
+        patch as Parameters<typeof updateScheduleEvent>[2],
+      );
+      if (!ev) throw new Error("Couldn't edit the event.");
+      return {
+        result: {
+          entityId: id,
+          prev: {
+            title: before.title,
+            day: before.day,
+            startTime: before.startTime,
+            endTime: before.endTime,
+          },
+          note: "Event updated.",
+        },
+        changed: true,
+      };
+    }
+    case "delete_event": {
+      if (!(await deleteScheduleEvent(userId, String(p["eventId"]))))
+        throw new Error("Couldn't delete the event.");
+      return { result: { note: "Event deleted." }, changed: true };
+    }
+    case "ui_open_page": {
+      const page = String(p["page"]);
+      return {
+        result: { navigate: PAGE_PATH[page] ?? `/${page}`, note: `Ready: open ${page}.` },
+        changed: false,
+      };
+    }
     case "toggle_automation": {
       const id = String(p["channelId"]);
       const want = Boolean(p["enabled"]);
@@ -533,6 +677,24 @@ async function runUndo(
     case "create_goal":
       if (!(await deleteGoal(userId, id))) throw new Error("Couldn't delete the goal.");
       return;
+    case "update_goal":
+      if (!(await updateGoal(userId, id, result["prev"] as Parameters<typeof updateGoal>[2])))
+        throw new Error("Couldn't restore the goal.");
+      return;
+    case "update_event":
+      if (
+        !(await updateScheduleEvent(
+          userId,
+          id,
+          result["prev"] as Parameters<typeof updateScheduleEvent>[2],
+        ))
+      )
+        throw new Error("Couldn't restore the event.");
+      return;
+    case "delete_goal":
+    case "delete_event":
+    case "ui_open_page":
+      throw new Error("This can't be undone.");
     case "toggle_automation":
       if (!(await setAutomationEnabled(userId, id, Boolean(result["prev"]))))
         throw new Error("Couldn't restore the automation.");

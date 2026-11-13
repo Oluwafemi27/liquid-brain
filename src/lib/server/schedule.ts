@@ -113,6 +113,33 @@ export async function toggleScheduleEventDone(
   return fromRow(data);
 }
 
+export async function updateScheduleEvent(
+  userId: string,
+  id: string,
+  patch: { title?: string; day?: Weekday; startTime?: string; endTime?: string; notes?: string },
+): Promise<ScheduleEvent | null> {
+  const db = getSupabaseAdmin();
+  if (!db) return null;
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.title !== undefined) updates["title"] = patch.title;
+  if (patch.day !== undefined) updates["day"] = patch.day;
+  if (patch.startTime !== undefined) updates["start_time"] = patch.startTime;
+  if (patch.endTime !== undefined) updates["end_time"] = patch.endTime;
+  if (patch.notes !== undefined) updates["notes"] = patch.notes;
+  const { data, error } = await db
+    .from("schedule_events")
+    .update(updates)
+    .eq("user_id", userId)
+    .eq("id", id)
+    .select(SELECT_COLUMNS)
+    .single();
+  if (error || !data) {
+    console.error("[schedule] failed to update schedule event", error);
+    return null;
+  }
+  return fromRow(data);
+}
+
 export async function deleteScheduleEvent(userId: string, id: string): Promise<boolean> {
   const db = getSupabaseAdmin();
   if (!db) return false;

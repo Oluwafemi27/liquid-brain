@@ -11,6 +11,7 @@ import { AgentTracePanel } from "@/components/aduf/agent-trace";
 import { ChatAttachmentCard } from "@/components/aduf/chat-attachment";
 import { ChatComposer } from "@/components/aduf/chat-composer";
 import { ChatMarkdown } from "@/components/aduf/chat-markdown";
+import { MessageActions, MessageEditor } from "@/components/aduf/message-actions";
 import { InsightToastStack } from "@/components/aduf/insight-toast";
 import { AdufAnalysisCard } from "@/components/aduf/aduf-analysis-card";
 import { SESSION_STORAGE_KEY, useAduf } from "@/store/aduf-store";
@@ -62,7 +63,9 @@ function BrainPage() {
     setMessages,
     startNewChat,
     answerQuestion,
+    editMessage,
   } = useAduf();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [recentChats, setRecentChats] = useState<
     Array<{ sessionId: string; preview: string; updatedAt: string }>
@@ -212,17 +215,31 @@ function BrainPage() {
                 animate={{ opacity: 1, y: 0 }}
                 className={m.role === "user" ? "ml-auto max-w-[85%]" : "max-w-[85%]"}
               >
-                <div
-                  className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                    m.role === "user" ? "bg-white/12" : "bg-secondary text-muted-foreground"
-                  }`}
-                >
-                  {m.role === "user" ? (
-                    <span className="whitespace-pre-wrap break-words">{m.text}</span>
-                  ) : (
-                    <ChatMarkdown content={m.text} />
-                  )}
-                </div>
+                {editingId === m.id ? (
+                  <MessageEditor
+                    initial={m.text}
+                    onCancel={() => setEditingId(null)}
+                    onSave={(t) => {
+                      setEditingId(null);
+                      editMessage(m.id, t);
+                    }}
+                  />
+                ) : (
+                  <div
+                    className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                      m.role === "user" ? "bg-white/12" : "bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {m.role === "user" ? (
+                      <span className="whitespace-pre-wrap break-words">{m.text}</span>
+                    ) : (
+                      <ChatMarkdown content={m.text} />
+                    )}
+                  </div>
+                )}
+                {editingId !== m.id && m.text ? (
+                  <MessageActions message={m} onEdit={() => setEditingId(m.id)} />
+                ) : null}
                 {m.trace?.length ? <AgentTracePanel steps={m.trace} /> : null}
                 {m.analysis ? <AdufAnalysisCard analysis={m.analysis} /> : null}
                 {m.attachments?.map((a) => (

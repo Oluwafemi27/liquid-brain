@@ -133,7 +133,7 @@ export async function applyPayment(
     await logEvent(userId, {
       platform: "aduf",
       kind: "system",
-      title: `Added ${tokens.toLocaleString()} tokens`,
+      title: `Added ${tokens.toLocaleString()} credits`,
       detail: "Top-up payment received",
       status: "ok",
     });
@@ -220,7 +220,7 @@ export async function startCheckout(
     if (!pack) throw new BillingError("That token pack isn't available.");
     kind = "topup";
     amountNgn = pack.priceNgn;
-    tokens = pack.tokens;
+    tokens = pack.tokens + pack.bonusTokens;
     label = pack.name;
   } else {
     plan = input.planId ? await getPlan(input.planId) : null;
@@ -714,11 +714,47 @@ export async function syncPaystackPlans(id: string): Promise<string> {
   return `Auto-renew enabled for ${plan.name} (${mode} mode).`;
 }
 
+export async function createPack(input: {
+  name: string;
+  tokens: number;
+  bonusTokens: number;
+  priceNgn: number;
+  priceUsd: number;
+}): Promise<void> {
+  const db = requireDb();
+  const { data: last } = await db
+    .from("token_packs")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { error } = await db.from("token_packs").insert({
+    id: `credits_${Date.now().toString(36)}`,
+    name: input.name.slice(0, 40) || "New pack",
+    tokens: Math.max(1, Math.round(input.tokens)),
+    bonus_tokens: Math.max(0, Math.round(input.bonusTokens)),
+    price_ngn: Math.max(0, input.priceNgn),
+    price_usd: Math.max(0, input.priceUsd),
+    active: false, // shown to customers only after the admin switches it on
+    sort_order: Number(last?.["sort_order"] ?? 0) + 1,
+  });
+  if (error) throw new BillingError(error.message);
+}
+
 export async function updatePack(
   id: string,
-  patch: { name?: string; tokens?: number; priceNgn?: number; priceUsd?: number; active?: boolean },
+  patch: {
+    name?: string;
+    tokens?: number;
+    bonusTokens?: number;
+    priceNgn?: number;
+    priceUsd?: number;
+    active?: boolean;
+  },
 ): Promise<void> {
   const row: Record<string, unknown> = {};
+  if (patch.bonusTokens !== undefined)
+    row["bonus_tokens"] = Math.max(0, Math.round(patch.bonusTokens));
   if (patch.name !== undefined) row["name"] = patch.name.slice(0, 40);
   if (patch.tokens !== undefined) row["tokens"] = Math.max(1, Math.round(patch.tokens));
   if (patch.priceNgn !== undefined) row["price_ngn"] = Math.max(0, patch.priceNgn);
@@ -852,11 +888,17 @@ export async function updateBillingSettings(patch: {
   trialEnabled?: boolean;
   trialDays?: number;
   trialPlan?: string;
+  tokensPerCredit?: number;
 }): Promise<void> {
   const row: Record<string, unknown> = {};
   if (patch.trialEnabled !== undefined) row["trial_enabled"] = patch.trialEnabled;
   if (patch.trialDays !== undefined)
     row["trial_days"] = Math.min(Math.max(Math.round(patch.trialDays), 1), 90);
+  if (patch.tokensPerCredit !== undefined)
+    row["tokens_per_credit"] = Math.min(
+      Math.max(Math.round(patch.tokensPerCredit), 500),
+      1_000_000,
+    );
   if (patch.trialPlan !== undefined) {
     const plan = await getPlan(patch.trialPlan);
     if (!plan || plan.id === "free") throw new BillingError("The trial plan must be a paid plan.");

@@ -18,10 +18,10 @@ export function TokenChip() {
     <Link
       to="/billing"
       className={`inline-flex items-center gap-1.5 text-[11px] hover:text-foreground ${tone}`}
-      title="AI tokens left — open Billing"
+      title="AI credits left — open Billing"
     >
       <Coins className="h-3 w-3" aria-hidden />{" "}
-      {total <= 0 ? "Out of tokens" : `${formatTokens(total)} tokens left`}
+      {total <= 0 ? "Out of credits" : `${formatTokens(total)} credits left`}
     </Link>
   );
 }

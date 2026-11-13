@@ -15,6 +15,7 @@ import {
 import { proposeAction } from "@/lib/server/actions";
 import { buildFactsSheet } from "@/lib/server/verdict";
 import { connectedAppsContext } from "@/lib/server/composio-sync";
+import { workspaceContext } from "@/lib/server/workspace-context";
 import type { SourceRef } from "@/lib/aduf-types";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
@@ -72,10 +73,13 @@ const bodySchema = z.object({
     .optional(),
 });
 
-function json(data: unknown, status = 200) {
+function json(data: unknown, status = 200, timing?: string) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(timing ? { "server-timing": timing } : {}),
+    },
   });
 }
 
@@ -163,6 +167,33 @@ export const Route = createFileRoute("/api/chat")({
     },
   },
 });
+
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    p.catch(() => fallback),
+    new Promise<T>((r) => setTimeout(() => r(fallback), ms)),
+  ]);
+}
+
+type Facts = Awaited<ReturnType<typeof buildFactsSheet>> | null;
+const factsCache = new Map<string, { at: number; value: Facts }>();
+async function cachedFacts(userId: string): Promise<Facts> {
+  const hit = factsCache.get(userId);
+  if (hit && Date.now() - hit.at < 45_000) return hit.value;
+  const value = await withTimeout<Facts>(
+    buildFactsSheet(userId).catch((e) => {
+      console.error("[api/chat] facts sheet failed", e);
+      return null;
+    }),
+    4000,
+    null,
+  );
+  if (value) {
+    if (factsCache.size > 500) factsCache.clear();
+    factsCache.set(userId, { at: Date.now(), value });
+  }
+  return value;
+}
 
 async function handleChat(
   request: Request,
@@ -285,19 +316,22 @@ async function handleChat(
     return json({ reply: error.message, question: null, trace: [] });
   }
 
-  const surveyBase = authedUser
-    ? await getSurvey(authedUser.id).then((s) => (s ? surveyToContext(s) : undefined))
-    : undefined;
-  const appsContext = authedUser ? await connectedAppsContext(authedUser.id) : undefined;
-  const surveyContext = [surveyBase, appsContext].filter(Boolean).join("\n\n") || undefined;
-
-  // What ADUF actually knows right now — numbered so the answer can cite it.
-  const facts = authedUser
-    ? await buildFactsSheet(authedUser.id).catch((e) => {
-        console.error("[api/chat] facts sheet failed", e);
-        return null;
-      })
-    : null;
+  // These three are independent, so they are fetched at the same time, and none may hold the reply up
+  // for long: a slow connector or database simply means that piece is left out of this answer.
+  const t0 = Date.now();
+  const [surveyBase, appsContext, workspaceCtx, facts] = authedUser
+    ? await Promise.all([
+        withTimeout(getSurvey(authedUser.id), 3000, null).then((s) =>
+          s ? surveyToContext(s) : undefined,
+        ),
+        withTimeout(connectedAppsContext(authedUser.id), 2500, undefined),
+        withTimeout(workspaceContext(authedUser.id), 2500, undefined),
+        // What ADUF actually knows right now, numbered so the answer can cite it. Kept 45 s per person.
+        cachedFacts(authedUser.id),
+      ])
+    : [undefined, undefined, undefined, null];
+  const surveyContext =
+    [surveyBase, appsContext, workspaceCtx].filter(Boolean).join("\n\n") || undefined;
 
   try {
     const run = () =>
@@ -314,7 +348,9 @@ async function handleChat(
           ),
         { maxAttempts: 3 },
       );
+    const tContext = Date.now() - t0;
     if (authedUser) await assertTokensAvailable(authedUser.id);
+    const tModelStart = Date.now();
     const { result, trace } = authedUser
       ? await withBilling({ userId: authedUser.id, feature: "chat" }, run)
       : await run();
@@ -365,17 +401,24 @@ async function handleChat(
       proposedAction,
       sources,
     });
-    return json({
-      reply: result.reply,
-      question: result.question ?? null,
-      trace: fullTrace,
-      attachments,
-      analysis: result.analysis ?? null,
-      proposedAction,
-      actionRecord,
-      sources,
-      dataGaps,
-    });
+    const tModel = Date.now() - tModelStart;
+    const timing = `context;dur=${tContext}, model;dur=${tModel}, total;dur=${Date.now() - t0}`;
+    console.info(`[perf] chat ${timing}`);
+    return json(
+      {
+        reply: result.reply,
+        question: result.question ?? null,
+        trace: fullTrace,
+        attachments,
+        analysis: result.analysis ?? null,
+        proposedAction,
+        actionRecord,
+        sources,
+        dataGaps,
+      },
+      200,
+      timing,
+    );
   } catch (error) {
     if (error instanceof QuotaExceededError || error instanceof EntitlementError) {
       void logMessage(userId, sessionId, "aduf", error.message);

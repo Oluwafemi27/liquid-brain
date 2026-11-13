@@ -12,6 +12,7 @@ import {
   adminGrantTokensFn,
   adminSetPromoActiveFn,
   adminSyncPaystackPlanFn,
+  adminCreatePackFn,
   adminUpdatePackFn,
   adminUpdatePlanFn,
 } from "@/lib/server-fns";
@@ -23,7 +24,12 @@ interface AdminBilling {
   plans: Plan[];
   packs: TokenPack[];
   promos: PromoCodeRow[];
-  settings: { trialEnabled: boolean; trialDays: number; trialPlan: string };
+  settings: {
+    trialEnabled: boolean;
+    trialDays: number;
+    trialPlan: string;
+    tokensPerCredit: number;
+  };
   paymentsReady: boolean;
 }
 
@@ -126,7 +132,7 @@ function PlanEditor({
         {plan.highlighted ? <Badge tone="info">Highlighted</Badge> : null}
         <span className="text-xs text-muted-foreground">
           {plan.priceNgnMonth ? `${formatNgn(plan.priceNgnMonth)}/mo` : "Free"} ·{" "}
-          {formatTokens(plan.monthlyTokens)} tokens
+          {formatTokens(plan.monthlyTokens)} credits
         </span>
         {plan.id !== "free" ? (
           <span className="ml-auto text-[11px]">
@@ -192,7 +198,7 @@ function PlanEditor({
               onChange={(e) => setP({ ...p, priceUsdYear: num(e.target.value) })}
             />
           </Field>
-          <Field label="AI tokens per month">
+          <Field label="AI credits per month">
             <input
               className={inputCls}
               type="number"
@@ -326,12 +332,22 @@ function PackRow({
       </Td>
       <Td>
         <input
-          aria-label="Tokens"
-          className={`${inputCls} w-28`}
+          aria-label="Credits"
+          className={`${inputCls} w-24`}
           type="number"
           min={1}
           value={k.tokens}
           onChange={(e) => setK({ ...k, tokens: Math.round(Number(e.target.value)) })}
+        />
+      </Td>
+      <Td>
+        <input
+          aria-label="Bonus credits"
+          className={`${inputCls} w-24`}
+          type="number"
+          min={0}
+          value={k.bonusTokens}
+          onChange={(e) => setK({ ...k, bonusTokens: Math.round(Number(e.target.value)) })}
         />
       </Td>
       <Td>
@@ -364,7 +380,13 @@ function PackRow({
               data: {
                 accessToken,
                 id: pack.id,
-                patch: { name: k.name, tokens: k.tokens, priceNgn: k.priceNgn, active: k.active },
+                patch: {
+                  name: k.name,
+                  tokens: k.tokens,
+                  bonusTokens: k.bonusTokens,
+                  priceNgn: k.priceNgn,
+                  active: k.active,
+                },
               },
             });
             setBusy(false);
@@ -415,11 +437,35 @@ export function PlansSection() {
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold">Token top-up packs</h3>
-            <Table head={["Name", "Tokens", "Price (₦)", "On sale", ""]}>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Credit top-up packs</h3>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  const r = await adminCreatePackFn({
+                    data: {
+                      accessToken,
+                      pack: {
+                        name: "New pack",
+                        tokens: 10,
+                        bonusTokens: 0,
+                        priceNgn: 1500,
+                        priceUsd: 1,
+                      },
+                    },
+                  });
+                  setMsg(r.ok ? "Pack added. Set it up, then switch it on." : r.error);
+                  void reload();
+                }}
+              >
+                Add pack
+              </Button>
+            </div>
+            <Table head={["Name", "Credits", "Bonus", "Price (₦)", "On sale", ""]}>
               {data.packs.map((k) => (
                 <PackRow
-                  key={`${k.id}-${k.tokens}-${k.priceNgn}-${k.active}`}
+                  key={`${k.id}-${k.tokens}-${k.bonusTokens}-${k.priceNgn}-${k.active}`}
                   pack={k}
                   accessToken={accessToken}
                   onSaved={() => void reload()}
@@ -434,7 +480,7 @@ export function PlansSection() {
               <p className="mt-1 text-xs text-muted-foreground">
                 New sign-ups get a trial of a paid plan with no card, then fall back to Free.
               </p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-4">
+              <div className="mt-3 grid gap-3 sm:grid-cols-5">
                 <label className="flex items-center gap-2 self-end text-xs">
                   <input
                     type="checkbox"
@@ -471,6 +517,17 @@ export function PlansSection() {
                       ))}
                   </select>
                 </Field>
+                <Field label="Model tokens per credit">
+                  <input
+                    className={inputCls}
+                    type="number"
+                    min={500}
+                    value={settings.tokensPerCredit}
+                    onChange={(e) =>
+                      setSettings({ ...settings, tokensPerCredit: Number(e.target.value) })
+                    }
+                  />
+                </Field>
                 <Button
                   size="sm"
                   className="self-end"
@@ -504,7 +561,7 @@ function describe(p: PromoCodeRow): string {
     ? `${p.percent}% off${p.appliesTo !== "any" ? ` (${p.appliesTo === "topup" ? "top-ups" : "plans"})` : ""}`
     : p.kind === "free_plan"
       ? `Free ${p.planId} · ${p.durationDays} days`
-      : `${formatTokens(p.tokens ?? 0)} bonus tokens`;
+      : `${formatTokens(p.tokens ?? 0)} bonus credits`;
 }
 
 function CopyBtn({ text, label }: { text: string; label?: string }) {

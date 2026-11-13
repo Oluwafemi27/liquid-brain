@@ -29,8 +29,8 @@ import { useAuth } from "@/store/auth-store";
 export const Route = createFileRoute("/billing")({
   head: () => ({
     meta: [
-      { title: "Plan & tokens — ADUF AI" },
-      { name: "description", content: "Manage your ADUF AI plan, AI tokens and payments." },
+      { title: "Plan & credits — ADUF AI" },
+      { name: "description", content: "Manage your ADUF AI plan, AI credits and payments." },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -195,10 +195,10 @@ function BillingPage() {
     <AppShell>
       <div className="mx-auto max-w-[1100px] space-y-6 px-4 py-6 sm:px-6 lg:py-10">
         <div>
-          <h1 className="text-2xl font-semibold">Plan &amp; tokens</h1>
+          <h1 className="text-2xl font-semibold">Plan &amp; credits</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            AI tokens power every answer, plan and reply. Your allowance renews every 30 days; extra
-            tokens never expire.
+            AI credits power every answer, plan and reply. A normal reply costs 1 credit. Your
+            allowance renews every 30 days; extra credits never expire.
           </p>
         </div>
 
@@ -258,12 +258,12 @@ function BillingPage() {
             <TokenBar ent={ent} />
             <p className="text-[11px] text-muted-foreground">
               Monthly allowance resets on {fmtDate(ent.wallet.periodEnd)}. Allowance is used first,
-              then extra tokens.
+              then extra credits.
             </p>
             {ent.wallet.total <= 0 ? (
               <p className="rounded-xl bg-red-400/10 p-3 text-xs text-red-200">
-                You're out of tokens, so ADUF can't answer until your allowance resets. Top up below
-                or upgrade your plan.
+                You're out of credits, so ADUF can't answer until your allowance resets. Top up
+                below or upgrade your plan.
               </p>
             ) : null}
           </GlassCard>
@@ -384,7 +384,7 @@ function BillingPage() {
         {data && data.packs.length > 0 ? (
           <section aria-labelledby="packs-title">
             <h2 id="packs-title" className="mb-1 text-lg font-semibold">
-              Need more tokens?
+              Need more credits?
             </h2>
             <p className="mb-4 text-xs text-muted-foreground">
               Top-ups never expire and are used after your monthly allowance.
@@ -396,7 +396,14 @@ function BillingPage() {
                   className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4"
                 >
                   <div>
-                    <p className="font-semibold">{formatTokens(k.tokens)} tokens</p>
+                    <p className="font-semibold">
+                      {formatTokens(k.tokens)} credits
+                      {k.bonusTokens > 0 ? (
+                        <span className="ml-1.5 rounded-full bg-emerald-400/15 px-2 py-0.5 text-[11px] font-medium text-emerald-300">
+                          +{formatTokens(k.bonusTokens)} bonus
+                        </span>
+                      ) : null}
+                    </p>
                     <p className="text-xs text-muted-foreground">{formatNgn(k.priceNgn)}</p>
                   </div>
                   <Button
@@ -416,7 +423,7 @@ function BillingPage() {
         {/* Usage */}
         {data ? (
           <GlassCard hover={false}>
-            <h2 className="text-sm font-semibold">Where your tokens went (last 30 days)</h2>
+            <h2 className="text-sm font-semibold">Where your credits went (last 30 days)</h2>
             {data.usage.length === 0 ? (
               <p className="mt-3 text-xs text-muted-foreground">Nothing used yet.</p>
             ) : (

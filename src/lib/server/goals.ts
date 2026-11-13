@@ -108,7 +108,7 @@ export async function bumpGoal(
 export async function updateGoal(
   userId: string,
   goalId: string,
-  patch: { title?: string; target?: number; currency?: string; due?: string },
+  patch: { title?: string; target?: number; currency?: string; due?: string; current?: number },
 ): Promise<Goal | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
@@ -118,6 +118,7 @@ export async function updateGoal(
   if (patch.target !== undefined) updates["target"] = patch.target;
   if (patch.currency !== undefined) updates["currency"] = patch.currency;
   if (patch.due !== undefined) updates["due"] = patch.due;
+  if (patch.current !== undefined) updates["current"] = patch.current;
 
   const { data, error } = await db
     .from("goals")

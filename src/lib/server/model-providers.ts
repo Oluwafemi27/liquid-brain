@@ -1,4 +1,4 @@
-import { assertTokensAvailable, billingContext, estimateTokens, recordUsage } from "./billing";
+import { assertTokensAvailable, billingContext, estimateTokens } from "./billing";
 import "@tanstack/react-start/server-only";
 import { recordModelCall } from "./monitoring";
 import { resilientFetch } from "@/lib/server/resilient-fetch";
@@ -185,8 +185,11 @@ async function callProviderChatRaw(
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1024,
-        system: args.system,
+        // 1024 cut long structured replies off mid-JSON, which forced a slow full retry.
+        max_tokens: 4096,
+        // The persona + skills + tool instructions are ~10K tokens and identical from one message to the
+        // next, so Anthropic caches them: later rounds and messages start much faster and cost less.
+        system: [{ type: "text", text: args.system, cache_control: { type: "ephemeral" } }],
         messages: args.messages.map((m) => ({
           role: m.role,
           content: m.media?.length
@@ -305,7 +308,7 @@ export async function callProviderChat(
       out.tokens && out.tokens > 0
         ? out.tokens
         : estimateTokens(args.system, ...args.messages.map((m) => m.content), out.text);
-    await recordUsage(ctx.userId, used, ctx.feature);
+    ctx.rawTokens = (ctx.rawTokens ?? 0) + used; // charged once, in credits, when the action ends
   }
   return { text: out.text, tokens: out.tokens ?? 0 };
 }

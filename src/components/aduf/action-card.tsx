@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -107,6 +107,7 @@ export function ActionCard({
   onUpdate: (a: ActionRecord) => void;
 }) {
   const accessToken = useAuth((s) => s.accessToken);
+  const router = useRouter();
   const [busy, setBusy] = useState<null | "approve" | "decline" | "undo">(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmOver, setConfirmOver] = useState(false);
@@ -238,7 +239,15 @@ export function ActionCard({
           <span className="text-muted-foreground">
             {action.decidedBy === "auto" ? "Ran on its own." : "Approved by you."}
           </span>
-          {left ? (
+          {action.result?.navigate ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void router.navigate({ to: action.result!.navigate as never })}
+            >
+              Open page
+            </Button>
+          ) : left ? (
             <Button
               size="sm"
               variant="outline"

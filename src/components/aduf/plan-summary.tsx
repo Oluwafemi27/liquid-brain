@@ -31,7 +31,7 @@ export function TokenBar({ ent }: { ent: Entitlements }) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={pct}
-        aria-label="Monthly tokens used"
+        aria-label="Monthly credits used"
       >
         <div
           className={`h-full rounded-full ${ent.wallet.total <= 0 ? "bg-red-400" : low ? "bg-amber-400" : "bg-cyan"}`}
@@ -40,7 +40,8 @@ export function TokenBar({ ent }: { ent: Entitlements }) {
       </div>
       <p className="mt-1.5 flex flex-wrap justify-between gap-x-3 text-[11px] text-muted-foreground">
         <span>
-          {formatTokens(ent.wallet.planRemaining)} of {formatTokens(planTokens)} monthly tokens left
+          {formatTokens(ent.wallet.planRemaining)} of {formatTokens(planTokens)} monthly credits
+          left
         </span>
         {bonus > 0 ? <span>+ {formatTokens(bonus)} bonus</span> : null}
       </p>
@@ -54,7 +55,7 @@ export function PlanSummaryCard() {
   return (
     <GlassCard hover={false} className="space-y-4">
       <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-        <Coins className="h-4 w-4" /> Plan &amp; tokens
+        <Coins className="h-4 w-4" /> Plan &amp; credits
       </h2>
       {!ent ? (
         <div className="h-14 animate-pulse rounded-xl bg-white/[0.05]" aria-hidden />
@@ -73,7 +74,7 @@ export function PlanSummaryCard() {
               to="/billing"
               className="rounded-full bg-white/15 px-4 py-2 text-xs font-medium hover:bg-white/20"
             >
-              Manage plan &amp; tokens
+              Manage plan &amp; credits
             </Link>
           </div>
           <TokenBar ent={ent} />

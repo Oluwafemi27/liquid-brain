@@ -88,6 +88,7 @@ export async function listPacks(opts: { includeInactive?: boolean } = {}): Promi
       id: r["id"] as string,
       name: r["name"] as string,
       tokens: Number(r["tokens"]),
+      bonusTokens: Number(r["bonus_tokens"] ?? 0),
       priceNgn: Number(r["price_ngn"]),
       priceUsd: Number(r["price_usd"]),
       active: Boolean(r["active"]),
@@ -115,16 +116,23 @@ export async function paystackPlanCode(
 
 // ------------------------------------------------------ accounts / lifecycle
 
+/** Model tokens that make one credit. Kept in billing_settings so an admin can tune it. */
+export const DEFAULT_TOKENS_PER_CREDIT = 12000;
+
 export async function getBillingSettings(): Promise<{
   trialEnabled: boolean;
   trialDays: number;
   trialPlan: string;
+  tokensPerCredit: number;
 }> {
   const { data } = await requireDb().from("billing_settings").select("*").eq("id", 1).maybeSingle();
   return {
     trialEnabled: data ? Boolean(data["trial_enabled"]) : false,
     trialDays: data ? Number(data["trial_days"]) : 14,
     trialPlan: data ? (data["trial_plan"] as string) : "growth",
+    tokensPerCredit: data
+      ? Number(data["tokens_per_credit"] ?? DEFAULT_TOKENS_PER_CREDIT)
+      : DEFAULT_TOKENS_PER_CREDIT,
   };
 }
 
@@ -317,12 +325,35 @@ export async function getEntitlements(userId: string): Promise<Entitlements> {
 export interface BillingContext {
   userId: string;
   feature: string;
+  /** Raw model tokens used so far in this action (filled in by every model call inside it). */
+  rawTokens?: number;
 }
 const als = new AsyncLocalStorage<BillingContext>();
 
-/** Runs `fn` so every model call inside it is checked against, and billed to, this user. */
-export const withBilling = <T>(ctx: BillingContext, fn: () => Promise<T>): Promise<T> =>
-  als.run(ctx, fn);
+let ratioCache: { at: number; value: number } | null = null;
+async function tokensPerCredit(): Promise<number> {
+  if (ratioCache && Date.now() - ratioCache.at < 60_000) return ratioCache.value;
+  const value = await getBillingSettings()
+    .then((s) => s.tokensPerCredit)
+    .catch(() => DEFAULT_TOKENS_PER_CREDIT);
+  ratioCache = { at: Date.now(), value };
+  return value;
+}
+/** Raw tokens to credits: never free (at least 1 if anything ran), and rounded up. */
+export const creditsFor = (rawTokens: number, perCredit: number): number =>
+  rawTokens > 0 ? Math.max(1, Math.ceil(rawTokens / Math.max(1, perCredit))) : 0;
+
+/** Runs `fn` as ONE billed action: every model call inside it adds to a running total, and the person is
+ *  charged once at the end, in credits (so a reply that took three model calls is still one reply). */
+export const withBilling = async <T>(ctx: BillingContext, fn: () => Promise<T>): Promise<T> => {
+  const scoped: BillingContext = { ...ctx, rawTokens: 0 };
+  try {
+    return await als.run(scoped, fn);
+  } finally {
+    const credits = creditsFor(scoped.rawTokens ?? 0, await tokensPerCredit());
+    if (credits > 0) await recordUsage(ctx.userId, credits, ctx.feature);
+  }
+};
 export const billingContext = (): BillingContext | undefined => als.getStore();
 
 export async function assertTokensAvailable(userId: string): Promise<void> {

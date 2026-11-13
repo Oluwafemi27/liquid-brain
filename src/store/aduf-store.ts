@@ -163,6 +163,10 @@ interface AdufState {
   /** Hydrates the sales / leads / customers / deals / funnel panels from imported data. */
   setBusinessData: (data: BusinessData) => void;
   sendMessage: (text: string, attachments?: ChatAttachment[]) => void;
+  /** Thumbs up/down on a reply (tapping the same one again clears it). Saved to the owner's history. */
+  rateMessage: (messageId: string, rating: "up" | "down") => void;
+  /** Rewrites an earlier question: drops it and everything after, then asks the new text. */
+  editMessage: (messageId: string, newText: string) => void;
   /** Replaces the whole messages list — used to hydrate a session's saved
    *  history from Supabase on load. */
   setMessages: (messages: ChatMessage[]) => void;
@@ -592,6 +596,46 @@ export const useAduf = create<AdufState>((set, get) => ({
           thinking: false,
         }));
       });
+  },
+
+  rateMessage: (messageId, rating) => {
+    const msg = get().messages.find((m) => m.id === messageId);
+    if (!msg || msg.role !== "aduf") return;
+    const next = msg.feedback === rating ? undefined : rating;
+    set((s) => ({
+      messages: s.messages.map((m) => (m.id === messageId ? { ...m, feedback: next } : m)),
+    }));
+    void import("@/lib/server-fns").then(({ rateMessageFn }) =>
+      rateMessageFn({
+        data: {
+          accessToken: useAuth.getState().accessToken,
+          sessionId: get().sessionId,
+          text: msg.text,
+          rating: next ?? null,
+        },
+      }).catch(() => undefined),
+    );
+  },
+
+  editMessage: (messageId, newText) => {
+    if (get().thinking) return;
+    const list = get().messages;
+    const idx = list.findIndex((m) => m.id === messageId);
+    const original = list[idx];
+    if (idx < 0 || !original || original.role !== "user" || !newText.trim()) return;
+    set({ messages: list.slice(0, idx) });
+    void import("@/lib/server-fns")
+      .then(({ truncateChatFn }) =>
+        truncateChatFn({
+          data: {
+            accessToken: useAuth.getState().accessToken,
+            sessionId: get().sessionId,
+            text: original.text,
+          },
+        }),
+      )
+      .catch(() => undefined)
+      .finally(() => get().sendMessage(newText));
   },
 
   answerQuestion: (messageId, values, label) => {
