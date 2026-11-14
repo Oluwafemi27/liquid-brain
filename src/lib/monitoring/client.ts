@@ -26,6 +26,9 @@ export async function initClientMonitoring(): Promise<void> {
           "Non-Error promise rejection captured",
           "Load failed",
           "Failed to fetch",
+          // The browser (or an extension / in-app browser) injecting its own script via eval(); our
+          // security policy rightly blocks it. Nothing in ADUF's code calls eval.
+          /Refused to evaluate a string as JavaScript/,
         ],
         beforeSend: (event) => scrubEvent(event),
       });
