@@ -13,7 +13,8 @@ import {
   Radio,
   Workflow,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import automationCore from "@/assets/automation-core.png";
 import liveFeed from "@/assets/automation-live-feed.webp";
 import { AppShell, PageHeader } from "@/components/aduf/app-shell";
@@ -102,8 +103,7 @@ function AutomationsPage() {
   const active = automations.find((a) => a.id === open) ?? null;
   const liveCount = automations.filter((a) => a.enabled).length;
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => fetchN8nDeployments(), []);
+  useLiveRefresh(fetchN8nDeployments, 30_000);
 
   return (
     <AppShell>

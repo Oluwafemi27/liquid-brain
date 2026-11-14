@@ -1,4 +1,5 @@
 import { requireFeature } from "./billing";
+import { appBaseUrl } from "@/lib/server/app-url";
 import "@tanstack/react-start/server-only";
 import type { DailyVerdict, VerdictItem } from "@/lib/aduf-types";
 import { logEvent } from "./activity";
@@ -8,7 +9,7 @@ import { getOwnerSettings, isQuietNow } from "./owner-settings";
 import { getSupabaseAdmin } from "./supabase";
 import { computeVerdict, loadVerdictInput } from "./verdict";
 
-const APP_URL = () => process.env["APP_URL"] ?? "";
+const APP_URL = () => appBaseUrl();
 
 /** Only things the owner agreed to hear about: broken/slow connections, failed runs, sales drops. */
 const alertWorthy = (i: VerdictItem) =>

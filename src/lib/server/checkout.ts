@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { appBaseUrl } from "@/lib/server/app-url";
 import { z } from "zod";
 import type { BillingInterval, PaymentView, Plan, PlanLimits } from "@/lib/billing-types";
 import { logEvent } from "./activity";
@@ -301,7 +302,7 @@ export async function startCheckout(
       "Payments aren't set up on this server yet. Ask the admin to add PAYSTACK_SECRET_KEY.",
     );
   }
-  const base = process.env["APP_URL"] || input.origin || "";
+  const base = appBaseUrl(process.env, input.origin || "");
   if (!/^https?:\/\//.test(base))
     throw new BillingError(
       "The app URL isn't configured (APP_URL), so Paystack can't send you back.",

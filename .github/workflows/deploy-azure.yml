@@ -57,7 +57,12 @@ jobs:
       - name: Roll out the new image
         run: |
           az containerapp update --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
-            --image "$REGISTRY/aduf:${{ github.sha }}"
+            --image "$REGISTRY/aduf:${{ github.sha }}" \
+            --min-replicas "${{ vars.MIN_REPLICAS || 2 }}" \
+            --max-replicas "${{ vars.MAX_REPLICAS || 10 }}" \
+            --scale-rule-name http-concurrency \
+            --scale-rule-type http \
+            --scale-rule-http-concurrency "${{ vars.HTTP_CONCURRENCY || 50 }}"
 
       - name: Show the address
         run: |

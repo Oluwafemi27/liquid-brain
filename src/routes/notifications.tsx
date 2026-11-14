@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AnimatePresence } from "framer-motion";
-import { BellOff, CheckCheck } from "lucide-react";
+import { BellOff, CheckCheck, Trash2 } from "lucide-react";
 import { AppShell, PageHeader } from "@/components/aduf/app-shell";
 import { GlassCard } from "@/components/aduf/liquid";
 import { InsightRow } from "@/components/aduf/insight-feed";
@@ -26,22 +26,38 @@ export const Route = createFileRoute("/notifications")({
 });
 
 function NotificationsPage() {
-  const { insights, markInsightRead, markAllInsightsRead, dismissInsight } = useAduf();
+  const { insights, markInsightRead, markAllInsightsRead, dismissInsight, clearAllInsights } =
+    useAduf();
   const unread = insights.filter((i) => !i.read).length;
 
   return (
     <AppShell>
       <div className="mx-auto max-w-[820px] px-4 py-6 sm:px-6 lg:py-8">
         <PageHeader eyebrow="Signals" title="Notifications">
-          {insights.length > 0 && unread > 0 ? (
-            <button
-              onClick={markAllInsightsRead}
-              className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-xs text-muted-foreground hover:bg-white/8 hover:text-foreground"
-            >
-              <CheckCheck className="h-3.5 w-3.5" />
-              Mark all read
-            </button>
-          ) : null}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {insights.length > 0 && unread > 0 ? (
+              <button
+                onClick={markAllInsightsRead}
+                className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-xs text-muted-foreground hover:bg-white/8 hover:text-foreground"
+              >
+                <CheckCheck className="h-3.5 w-3.5" />
+                Mark all read
+              </button>
+            ) : null}
+            {insights.length > 0 ? (
+              <button
+                onClick={() => {
+                  if (window.confirm("Clear all notifications? This can't be undone.")) {
+                    clearAllInsights();
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-xs text-muted-foreground hover:bg-white/8 hover:text-foreground"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Clear all
+              </button>
+            ) : null}
+          </div>
         </PageHeader>
 
         <GlassCard hover={false} className="p-3 sm:p-4">

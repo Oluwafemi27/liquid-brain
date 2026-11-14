@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
+import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import type { Automation, N8nDeployment } from "@/lib/aduf-types";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { fetchAutomations, fetchN8nDeployments } from "@/lib/server-fns";
@@ -106,6 +107,17 @@ export function AutomationsBootstrap() {
       cancelled = true;
     };
   }, [user, accessToken, setN8nDeployments]);
+
+  // Safety net under Realtime: also repairs a dropped websocket or a tab waking from sleep.
+  const refresh = useCallback(() => {
+    fetchAutomations({ data: { accessToken } })
+      .then(setAutomations)
+      .catch(() => {});
+    fetchN8nDeployments({ data: { accessToken } })
+      .then(setN8nDeployments)
+      .catch(() => {});
+  }, [accessToken, setAutomations, setN8nDeployments]);
+  useLiveRefresh(refresh, 60_000, Boolean(user && accessToken));
 
   useEffect(() => {
     const client = getSupabaseBrowser();

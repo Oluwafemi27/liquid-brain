@@ -1,3 +1,4 @@
+import { aiGate, serverBusy } from "@/lib/server/load-gate";
 import { LIMITS, checkRateLimit, sharedRetryAfter, tooManyRequests } from "@/lib/server/rate-limit";
 import {
   buildAttachmentContext,
@@ -157,7 +158,9 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const done: Array<() => void> = [];
+        const release = aiGate.enter();
+        if (!release) return serverBusy();
+        const done: Array<() => void> = [release];
         try {
           return await handleChat(request, (fn) => done.push(fn));
         } finally {

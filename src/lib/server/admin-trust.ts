@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { appBaseUrl } from "@/lib/server/app-url";
 import type { ConnectionHealth } from "@/lib/aduf-types";
 import { isAdminEmail } from "./admin";
 import { checkAllConnections } from "./connection-health";
@@ -234,7 +235,7 @@ export async function adminSecurityChecks(
       (p["paystack_plan_month"] || p["paystack_plan_year"]) &&
       !planCodeUsable(p["paystack_plan_mode"], psMode),
   ).length;
-  const appUrl = process.env["APP_URL"] ?? "";
+  const appUrl = appBaseUrl();
   const paystackCheck: SecurityCheck = !process.env["PAYSTACK_SECRET_KEY"]
     ? {
         id: "paystack",
@@ -330,8 +331,8 @@ export async function adminSecurityChecks(
     {
       id: "url",
       label: "App URL",
-      ok: env("APP_URL"),
-      detail: env("APP_URL")
+      ok: Boolean(appBaseUrl()),
+      detail: appBaseUrl()
         ? "Set — summaries link back to the app."
         : "Missing (APP_URL) — summaries won't include a link.",
     },

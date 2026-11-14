@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { appBaseUrl } from "@/lib/server/app-url";
 import { z } from "zod";
 import { json, requireAdmin } from "@/lib/server/require-admin";
 import {
@@ -53,7 +54,7 @@ export const Route = createFileRoute("/api/connectors/telegram")({
         const parsed = postSchema.safeParse(raw);
         if (!parsed.success) return json({ error: "Enter your bot token." }, 400);
 
-        const origin = (process.env["APP_URL"] || new URL(request.url).origin).replace(/\/+$/, "");
+        const origin = appBaseUrl(process.env, new URL(request.url).origin);
         const fail = (error: unknown, fallback: string) =>
           json({ error: error instanceof Error ? error.message : fallback }, 500);
 

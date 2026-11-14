@@ -1,3 +1,4 @@
+import { redisConfig } from "@/lib/server/kv";
 import "@tanstack/react-start/server-only";
 import type { ConnectionHealth } from "@/lib/aduf-types";
 import { composioConfigured, composioPing } from "@/connectors/composio-hub/client";
@@ -128,11 +129,14 @@ async function loadPlatform(): Promise<PlatformData> {
       {
         id: "redis",
         name: "Redis",
-        configured: Boolean(process.env["REDIS_URL"]),
+        configured: Boolean(redisConfig()),
         ok: null,
-        detail: process.env["REDIS_URL"]
-          ? "URL set."
-          : "Using in-memory cache (fine for one server).",
+        detail:
+          redisConfig()?.mode === "rest"
+            ? "Upstash (web credentials) set."
+            : redisConfig()
+              ? "URL set."
+              : "Using in-memory cache (fine for one server).",
       },
     ],
   };

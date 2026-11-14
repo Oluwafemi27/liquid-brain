@@ -31,6 +31,7 @@ import {
   deleteGoalFn,
   deleteScheduleEventFn,
   dismissInsightFn,
+  clearAllInsightsFn,
   fetchChatHistoryFn,
   fetchN8nDeployments as fetchN8nDeploymentsFn,
   markAllInsightsReadFn,
@@ -198,6 +199,7 @@ interface AdufState {
   markInsightRead: (id: string) => void;
   markAllInsightsRead: () => void;
   dismissInsight: (id: string) => void;
+  clearAllInsights: () => void;
   // Approving / declining proposed actions is server-gated now (lib/server/actions.ts,
   // surfaced through ActionCard) — there is deliberately no client-side path that applies one.
   /** Replaces the whole schedule list — used to hydrate from Supabase on load. */
@@ -712,6 +714,19 @@ export const useAduf = create<AdufState>((set, get) => ({
       .catch((err) => {
         console.error("[insights] dismissInsight failed", err);
         if (removed) get().upsertInsight(removed);
+      });
+  },
+
+  clearAllInsights: () => {
+    const before = get().insights;
+    set({ insights: [] });
+    clearAllInsightsFn({ data: { accessToken: useAuth.getState().accessToken } })
+      .then(({ ok }) => {
+        if (!ok) set({ insights: before });
+      })
+      .catch((err) => {
+        console.error("[insights] clearAllInsights failed", err);
+        set({ insights: before });
       });
   },
 

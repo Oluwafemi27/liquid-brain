@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { appBaseUrl } from "@/lib/server/app-url";
 import {
   composioConfigured,
   createTrigger,
@@ -259,7 +260,7 @@ export async function connectedAccountMap(userId: string): Promise<Record<string
 }
 
 export const relayTokenFor = (userId: string, tools: string[]) => signRelayToken(userId, tools);
-export const appUrl = (): string => (process.env["APP_URL"] ?? "").replace(/\/+$/, "");
+export const appUrl = (): string => appBaseUrl();
 export { chooseN8nMethod };
 export type { N8nMethod };
 

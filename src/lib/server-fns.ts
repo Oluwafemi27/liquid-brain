@@ -122,6 +122,7 @@ import { getAdminAnalytics } from "@/lib/server/admin-analytics";
 import {
   createInsight,
   dismissInsight,
+  clearAllInsights,
   listInsights,
   markAllInsightsRead,
   markInsightRead,
@@ -512,6 +513,14 @@ export const dismissInsightFn = createServerFn({ method: "POST" })
     const user = await verifyAccessToken(data.accessToken);
     if (!user) return { ok: false };
     return { ok: await dismissInsight(user.id, data.id) };
+  });
+
+export const clearAllInsightsFn = createServerFn({ method: "POST" })
+  .validator((data: { accessToken: string | null }) => data)
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return { ok: false };
+    return { ok: await clearAllInsights(user.id) };
   });
 
 // === Schedule ===

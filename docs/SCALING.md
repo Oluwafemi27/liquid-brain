@@ -32,3 +32,10 @@ Redis (Upstash) holds the shared caches and rate limits so any replica can answe
 
 ## Order of work
 1. Pooler URL for the database. 2. Two replicas with an HTTP scale rule. 3. Direct-to-storage uploads. 4. Queue for long jobs. 5. Streaming the reply so text appears while the model is still writing.
+
+## Servers, Redis and load protection (v17)
+
+- **Load balancing**: the app has no balancer of its own. Azure Container Apps ingress spreads requests across replicas; the deploy workflow now sets `--min-replicas` (repo variable `MIN_REPLICAS`, default 2), `--max-replicas` (`MAX_REPLICAS`, default 10) and an HTTP concurrency scale rule (`HTTP_CONCURRENCY`, default 50 requests per replica). Vercel scales serverless functions automatically.
+- **Per-server cap**: `src/lib/server/load-gate.ts` limits simultaneous AI replies per server (`MAX_INFLIGHT_AI`, default 40). Over the cap, `/api/chat` answers 503 + Retry-After instead of exhausting memory. `/api/health` reports `load.inflightAi`.
+- **Redis**: set `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (Vercel KV names `KV_REST_API_URL/TOKEN` also work), or `REDIS_URL`. REST wins. `/api/health` shows `redis: "rest" | "tcp" | "none"`. Upstash free plan = 500K commands/month; if it runs out the app silently falls back to per-server memory.
+- **URL / email**: `APP_URL`, `NEXT_PUBLIC_SITE_URL` or `SITE_URL` are all read; `RESEND_FROM_EMAIL` sets the sender (needs a real `RESEND_API_KEY`).

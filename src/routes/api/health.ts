@@ -7,7 +7,8 @@ import {
   flushDatadog,
   sentryEnabled,
 } from "@/lib/server/monitoring";
-import { getKv } from "@/lib/server/kv";
+import { aiGate } from "@/lib/server/load-gate";
+import { getKv, redisConfig } from "@/lib/server/kv";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 import { safeEqual } from "@/lib/server/signed-links";
 
@@ -40,7 +41,9 @@ export const Route = createFileRoute("/api/health")({
           datadog: datadogEnabled(),
           azureOpenAI: azureEndpoint() !== null,
           probed,
+          load: { inflightAi: aiGate.inflight(), maxAi: aiGate.max },
           cache: (await getKv()).kind,
+          redis: redisConfig()?.mode ?? "none",
         });
       },
     },

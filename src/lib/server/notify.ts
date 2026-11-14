@@ -30,7 +30,10 @@ export async function sendEmailToOwner(
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: JSON.stringify({
-      from: process.env["DIGEST_FROM"] ?? "ADUF AI <onboarding@resend.dev>",
+      from:
+        process.env["RESEND_FROM_EMAIL"] ||
+        process.env["DIGEST_FROM"] ||
+        "ADUF AI <onboarding@resend.dev>",
       to,
       subject,
       text,

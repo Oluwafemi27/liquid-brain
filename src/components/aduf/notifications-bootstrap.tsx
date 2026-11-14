@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
+import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { fetchInsightsFn } from "@/lib/server-fns";
 import { useAduf } from "@/store/aduf-store";
@@ -41,6 +42,13 @@ export function NotificationsBootstrap() {
       cancelled = true;
     };
   }, [user, accessToken, setInsights]);
+
+  const refresh = useCallback(() => {
+    fetchInsightsFn({ data: { accessToken } })
+      .then(setInsights)
+      .catch(() => {});
+  }, [accessToken, setInsights]);
+  useLiveRefresh(refresh, 60_000, Boolean(user && accessToken));
 
   useEffect(() => {
     const client = getSupabaseBrowser();

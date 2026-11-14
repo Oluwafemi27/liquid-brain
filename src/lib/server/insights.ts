@@ -122,3 +122,16 @@ export async function dismissInsight(userId: string, id: string): Promise<boolea
   }
   return true;
 }
+
+/** Delete every notification for this user (the "Clear all" button). */
+export async function clearAllInsights(userId: string): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  if (!db) return false;
+
+  const { error } = await db.from("insights").delete().eq("user_id", userId);
+  if (error) {
+    console.error("[insights] failed to clear insights", error);
+    return false;
+  }
+  return true;
+}

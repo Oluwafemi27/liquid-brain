@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { appBaseUrl } from "@/lib/server/app-url";
 import { verifyAccessToken } from "@/lib/server/survey";
 import { syncComposioConnections } from "@/lib/server/composio-sync";
 import {
@@ -54,7 +55,7 @@ export const startComposioConnectFn = createServerFn({ method: "POST" })
       if (!user) return { ok: false, message: "Sign in again to connect an app." };
       if (!/^[a-z0-9_-]{1,80}$/i.test(data.slug))
         return { ok: false, message: "That app name isn't valid." };
-      const base = (process.env["APP_URL"] || data.origin || "").replace(/\/+$/, "");
+      const base = appBaseUrl(process.env, data.origin || "");
       if (!/^https:\/\/|^http:\/\/localhost(:\d+)?$/.test(base)) {
         return {
           ok: false,

@@ -1,7 +1,7 @@
 import "@tanstack/react-start/server-only";
 import { createHash } from "node:crypto";
 
-// A small shared "memory" for the whole fleet of servers. With REDIS_URL set, every server uses the
+// A small shared "memory" for the whole fleet of servers. With Upstash REST credentials or REDIS_URL set, every server uses the
 // same Redis, so rate limits, sign-in checks and cached data are shared and a change made on one server is
 // seen by all. Without it, each server keeps its own in-memory copy (fine for one server, and the
 // app works the same, just without sharing). If Redis goes down mid-flight the app quietly carries
@@ -115,17 +115,58 @@ export function createRedisKv(client: RedisLike, fallback: Kv, now: () => number
   };
 }
 
+/** Which Redis (if any) the env points at. Upstash's web (REST) credentials win over a REDIS_URL link. */
+export function redisConfig(
+  env: Record<string, string | undefined> = process.env,
+): { mode: "rest"; url: string; token: string } | { mode: "tcp"; url: string } | null {
+  const restUrl = env["UPSTASH_REDIS_REST_URL"] || env["KV_REST_API_URL"];
+  const restToken = env["UPSTASH_REDIS_REST_TOKEN"] || env["KV_REST_API_TOKEN"];
+  if (restUrl && restToken)
+    return { mode: "rest", url: restUrl.replace(/\/+$/, ""), token: restToken };
+  const tcp = env["REDIS_URL"];
+  return tcp ? { mode: "tcp", url: tcp } : null;
+}
+
+/** Talks to Upstash over HTTPS — no long-lived socket, which suits serverless (Vercel) best. */
+export function createUpstashRestClient(
+  url: string,
+  token: string,
+  fetchImpl: typeof fetch = fetch,
+): RedisLike {
+  const call = async (command: Array<string | number>): Promise<unknown> => {
+    const res = await fetchImpl(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(command),
+      signal: AbortSignal.timeout(1_500),
+    });
+    const body = (await res.json().catch(() => ({}))) as { result?: unknown; error?: string };
+    if (!res.ok || body.error) throw new Error(body.error ?? `Upstash HTTP ${res.status}`);
+    return body.result ?? null;
+  };
+  return {
+    get: async (k) => (await call(["GET", k])) as string | null,
+    set: (k, v, mode, ttl) => call(["SET", k, v, mode, ttl]),
+    del: (k) => call(["DEL", k]),
+    eval: (script, numKeys, ...args) => call(["EVAL", script, numKeys, ...args]),
+    on: () => undefined,
+  };
+}
+
 let instance: Kv | null = null;
 
 /** The shared store for this server: Redis when REDIS_URL is set, otherwise in-memory. */
 export async function getKv(env: Record<string, string | undefined> = process.env): Promise<Kv> {
   if (instance) return instance;
   const memory = createMemoryKv();
-  const url = env["REDIS_URL"];
-  if (!url) return (instance = memory);
+  const cfg = redisConfig(env);
+  if (!cfg) return (instance = memory);
+  if (cfg.mode === "rest") {
+    return (instance = createRedisKv(createUpstashRestClient(cfg.url, cfg.token), memory));
+  }
   try {
     const { default: Redis } = await import("ioredis");
-    const client = new Redis(url, {
+    const client = new Redis(cfg.url, {
       lazyConnect: true,
       connectTimeout: 2_000,
       commandTimeout: 1_500,
