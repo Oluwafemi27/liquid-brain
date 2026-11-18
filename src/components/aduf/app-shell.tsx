@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
   Bell,
@@ -29,6 +29,10 @@ import { ScheduleBootstrap } from "./schedule-bootstrap";
 import { SignInGate } from "./sign-in-gate";
 import { SignInModal } from "./sign-in-modal";
 import { SurveyModal } from "./survey-modal";
+import { DemoBanner } from "./demo-banner";
+import { DemoLocked } from "./demo-locked";
+import { UsageBootstrap } from "./usage-bootstrap";
+import { UsageNotices } from "./usage-notices-banner";
 
 const nav = [
   { to: "/", label: "Brain", icon: Brain },
@@ -141,6 +145,21 @@ export function AppShell({ children }: { children: ReactNode }) {
   const connectedCount = sources.filter((s) => s.connected).length;
   const totalFacts = memoryNodes.reduce((sum, n) => sum + n.facts, 0);
   const unread = insights.filter((i) => !i.read).length;
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isDemo = Boolean(user?.demo);
+  // Pages that connect outside accounts or take payment: the demo can't use them (the server refuses too).
+  const lockedPage = isDemo
+    ? (
+        {
+          "/connectors": "Connectors",
+          "/supplier-orders": "Suppliers",
+          "/billing": "Plans and billing",
+        } as Record<string, string>
+      )[pathname]
+    : undefined;
+  const navItems = isDemo
+    ? nav.filter((n) => n.label !== "Connectors" && n.label !== "Suppliers")
+    : nav;
 
   // Adopt the Google account's name as the dashboard's display name the
   // first time someone signs in, without clobbering a name they've since
@@ -175,6 +194,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <BusinessDataBootstrap />
       <NotificationsBootstrap />
       <ScheduleBootstrap />
+      <UsageBootstrap />
       <SignInModal />
       <SurveyModal />
       <LiquidBackground />
@@ -196,7 +216,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="mt-4 flex flex-1 flex-col gap-1">
-          {nav.map(({ to, label, icon: Icon }) => (
+          {navItems.map(({ to, label, icon: Icon }) => (
             <Link
               key={to}
               to={to}
@@ -265,7 +285,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <main className="min-w-0 overflow-x-hidden pb-24 pt-16 lg:pb-8 lg:pt-0 lg:pl-[268px]">
-        {children}
+        <DemoBanner />
+        <UsageNotices />
+        {lockedPage ? <DemoLocked what={lockedPage} /> : children}
       </main>
 
       <nav className="glass fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 rounded-none px-2 pt-1.5 pb-[env(safe-area-inset-bottom)] lg:hidden">

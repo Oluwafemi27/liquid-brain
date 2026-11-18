@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { getDocumentMeta } from "@/lib/server/documents";
-import { json, requireUser } from "@/lib/server/require-admin";
+import { json, requireUser, requireRealUser } from "@/lib/server/require-admin";
 import { signFileLink } from "@/lib/server/signed-links";
 
 /** Gives the signed-in person a ten-minute link to one of their own documents. */
@@ -9,7 +9,7 @@ export const Route = createFileRoute("/api/documents/link")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const auth = await requireUser(request);
+        const auth = await requireRealUser(request);
         if (!auth.ok) return auth.response;
         const parsed = z
           .object({ id: z.string().uuid() })

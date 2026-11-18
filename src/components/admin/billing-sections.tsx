@@ -1,4 +1,5 @@
 import { Check, Copy, Loader2 } from "lucide-react";
+import { DemoSettingsCard } from "./demo-settings";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, KpiCard, Pager, SearchBox, SectionHeader, Table, Td } from "@/components/admin/ui";
 import { Button } from "@/components/ui/button";
@@ -217,6 +218,34 @@ function PlanEditor({
                 setP({
                   ...p,
                   limits: { ...p.limits, automations: Math.round(num(e.target.value)) },
+                })
+              }
+            />
+          </Field>
+          <Field label="AI replies per hour (0 = no cap)">
+            <input
+              className={inputCls}
+              type="number"
+              min={0}
+              value={p.limits.hitsPerHour}
+              onChange={(e) =>
+                setP({
+                  ...p,
+                  limits: { ...p.limits, hitsPerHour: Math.round(num(e.target.value)) },
+                })
+              }
+            />
+          </Field>
+          <Field label="AI replies per day (0 = no cap)">
+            <input
+              className={inputCls}
+              type="number"
+              min={0}
+              value={p.limits.hitsPerDay}
+              onChange={(e) =>
+                setP({
+                  ...p,
+                  limits: { ...p.limits, hitsPerDay: Math.round(num(e.target.value)) },
                 })
               }
             />
@@ -548,6 +577,7 @@ export function PlansSection() {
               ) : null}
             </div>
           ) : null}
+          <DemoSettingsCard />
         </>
       )}
     </div>

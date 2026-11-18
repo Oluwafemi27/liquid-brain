@@ -1,112 +1,133 @@
-# Liquid Brain
+<div align="center">
 
-Build me a full-stack web app called "ADUF AI" - The Business Brain for SMBs.
+<img src="public/icon-192.png" alt="ADUF AI logo" width="96" height="96" />
 
-VIBE & DESIGN
+# ADUF AI
 
-Theme: "Liquid Glass COO Dashboard". Premium, dark, calm, powerful.
+**An always-on AI COO for small and medium businesses.**
+It watches your sales, leads and retention, talks to you about what is happening, tracks your goals, and automates the busywork across ads, CRM, payments and messaging.
 
-Inspiration: Apple Liquid Glass + Linear + Jarvis from Iron Man
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
+[![TanStack Start](https://img.shields.io/badge/TanStack-Start-ef4444)](https://tanstack.com/start)
+[![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Auth-3FCF8E?logo=supabase&logoColor=white)](https://supabase.com)
+[![E2E](https://github.com/Oluwafemi27/liquid-brain/actions/workflows/e2e.yml/badge.svg)](https://github.com/Oluwafemi27/liquid-brain/actions/workflows/e2e.yml)
+[![Deploy](https://github.com/Oluwafemi27/liquid-brain/actions/workflows/deploy-azure.yml/badge.svg)](https://github.com/Oluwafemi27/liquid-brain/actions/workflows/deploy-azure.yml)
 
-Colors: Background #0A0E1A, Glass #FFFFFF15 with backdrop-blur-xl, Accent Gradient: Cyan #00E5FF to Purple #7C3AED
+[**Live app**](https://liquid-brain.vercel.app) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md) · [Docs index](#documentation)
 
-Typography: Inter for body, Space Grotesk for headings
+</div>
 
-Effects: Subtle animated water ripple background shader, liquid glass cards, 3D floating elements, ripple on hover, water-fill loading states. Use framer-motion for all animations. Use react-three-fiber for subtle 3D only. Must be 60fps.
+<p align="center">
+  <img src="docs/screenshots/landing-desktop.jpg" alt="ADUF AI landing page with Continue with Google and Continue as demo" width="900" />
+</p>
 
-RESPONSIVE
+## Try it in one click
 
-Mobile first. Desktop: 3-column layout. Mobile: Bottom tab bar with 5 tabs. Must be PWA ready.
+Open the [live app](https://liquid-brain.vercel.app) and choose **Continue as demo**. You get your own private 24-hour sandbox: no sign-up, nothing shared with other visitors, and everything is deleted when the visit ends. Demo accounts can't connect external services. See [docs/DEMO-AND-LIMITS.md](docs/DEMO-AND-LIMITS.md).
 
-PAGES TO BUILD:
+## What it does
 
-1. HOME - "THE BRAIN"
+| | |
+|---|---|
+| **Brain chat** | Ask the business anything. The agent reads your connected data, shows its steps, asks before it acts, and can undo what it did. |
+| **Goals engine** | Set KPIs and sub-tasks, track progress, and let the agent plan the next step. |
+| **Automations** | Turn automations on and off without code, or have the agent build n8n workflows that need no credential setup. |
+| **Business memory** | A knowledge graph of customers, products, revenue and traffic, built from your data. |
+| **Analytics and what-if** | Charts, scheduled reports, and a simulator for questions like "what if I raise ad spend by ₦50k?". |
+| **Connectors** | Google Analytics, Sheets, Drive and Gmail, Telegram, Meta Ads, Shopify and Paystack, through OAuth or [Composio](https://composio.dev). |
+| **Skills** | Business analyst (pandas in a sandbox), competitor spy, dropshipping, Meta ads operator (read-only). See [docs/SKILLS.md](docs/SKILLS.md). |
+| **Plans and limits** | Credits, per-hour and per-day reply limits, usage meters and clear notices before a limit is hit. See [docs/BILLING.md](docs/BILLING.md). |
 
-Purpose: Default dashboard. ADUF talks to the user like a COO.
+### Built to be trusted with business data
 
-Layout Desktop: Left Nav | Center Feed | Right Brain Chat
+- **Per-user privacy.** Each account's model keys, connections, chats and notifications are private to that account.
+- **Approvals, limits and undo.** Risky actions wait for your approval, and the server enforces limits, not the browser ([docs/TRUST-LAYER.md](docs/TRUST-LAYER.md)).
+- **Uploads are scanned and short-lived.** Files are virus-scanned, originals are deleted within 24 hours, and large media is discarded after reading ([docs/CHAT-ATTACHMENTS.md](docs/CHAT-ATTACHMENTS.md)).
+- **Secrets are encrypted** at rest. See [docs/SECURITY.md](docs/SECURITY.md).
 
-Components:
+<p align="center">
+  <img src="docs/screenshots/landing-mobile.jpg" alt="ADUF AI on a phone" width="260" />
+</p>
 
-- Header: "Good Morning, {UserName}" + Status: "ADUF is Active"
+The interface is mobile-first and installable as a PWA, with a left sidebar on desktop and a bottom tab bar on phones.
 
-- Center: "Insight Cards" in liquid glass. Example: "Sales dropped 12%. I paused ads and doubled WhatsApp followups. [Approve] [Why?]"
+## Tech stack
 
-- KPI Section: 3x "Water Bubble" 3D cards for Sales, Leads, Retention with % change. They float slightly.
+| Layer | Choice |
+|---|---|
+| App | [TanStack Start](https://tanstack.com/start) (React 19, TypeScript, Vite), Tailwind CSS, Radix UI, Framer Motion, Recharts |
+| State | Zustand |
+| Data and auth | Supabase (Postgres, Auth, Realtime, Storage) |
+| Shared limits and caches | Redis (optional): ioredis or Upstash REST |
+| AI | Pluggable model providers, keys stored per user |
+| Integrations | OAuth, Composio, n8n, Paystack |
+| Monitoring | Sentry, Datadog RUM |
+| Hosting | Vercel or Azure Container Apps, the same code on both |
+| Tests | Node test scripts for the server logic, Playwright smoke tests at four screen sizes |
 
-- Right: Always-on "Brain Chat" panel. ChatGPT style. Placeholder: "Ask ADUF anything..."
+## Getting started
 
-2. GOALS ENGINE
-
-Purpose: Set and track business KPIs
-
-Layout: Grid of 3D "Goal Orbs". Each orb is glass with water inside that fills based on % progress.
-
-Example Goal: "₦2,000,000 in Sales - 45%"
-
-Inside orb: list of sub-tasks. Buttons: [Edit Plan] [+ New Goal]
-
-Animation: When goal hits 100%, orb bursts into particles.
-
-3. AUTOMATION GRID
-
-Purpose: Replace n8n. Toggle automations on/off. No code.
-
-Layout: "Channel Galaxy". Center 3D sphere = "Automation Core". Orbiting spheres = WEBSITE, WHATSAPP, CRM, PAYMENTS, ADS, EMAIL.
-
-Each sphere is a toggle. ON = fills with water + connects with light beam to core.
-
-Click sphere → opens slide-up sheet with: Trigger → Action → Goal it affects.
-
-4. BUSINESS MEMORY
-
-Purpose: Show what ADUF knows
-
-Layout: Interactive 3D Knowledge Graph using react-force-graph.
-
-Nodes: Customers, Products, Revenue, Traffic. Edges are light beams.
-
-Top: "Connect New Data Source" button. Show Shopify, Google Analytics, WhatsApp logos in glass tiles.
-
-5. ANALYTICS & SIMULATOR
-
-Purpose: Reports + "What If" tool
-
-Components: Liquid bar charts and line charts using Recharts.
-
-Feature: "What If Simulator" slider. "Increase Ad Spend by ₦50k" → chart animates and predicts "+23 Leads"
-
-Loading: Water-fill animation for charts.
-
-6. SETTINGS & INTEGRATIONS
-
-Grid of glass tiles for each integration. Clicking "Connect" plays water-pouring animation.
-
-GLOBAL RULES
-
-- Loading: Never use spinners. Use "water filling" progress bars and liquid skeleton screens.
-
-- Navigation: Left sidebar desktop. Bottom tab bar mobile: [Brain][Goals][Grid][Memory][Me]
-
-- Speed: Lazy load 3D. Initial JS < 200kb. Use Zustand for state.
-
-- Tech: Next.js 14, TypeScript, TailwindCSS, Framer Motion, Zustand, Recharts, react-three-fiber
-
-DATA
-
-For now use mock data for Sales, Leads, Goals, Automations. Structure it so I can connect a FastAPI backend later.
-
-Create all 6 pages, the responsive layout, the liquid glass components, and the water animations. Make it feel alive and fast.
-
-This project was bootstrapped from a single product brief above and built out into a working app.
-
-## Development
-
-You need Node.js — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Requirements: Node.js 22 and a Supabase project.
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+git clone https://github.com/Oluwafemi27/liquid-brain.git
+cd liquid-brain
+npm install
+cp .env.example .env     # then fill in the values below
 npm run dev
 ```
+
+Apply the SQL files in [`supabase/migrations`](supabase/migrations) in order to your Supabase project.
+
+### Minimum configuration
+
+| Variable | Purpose |
+|---|---|
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Browser sign-in |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Server database access. Keep the service role key secret. |
+| `TOKEN_ENCRYPTION_KEY` | Encrypts stored tokens and keys |
+| `APP_URL` | Public https origin, used for OAuth redirects and emails |
+| `CRON_SECRET` | Protects the scheduled job endpoints |
+
+Everything else (Redis, Resend, Sentry, Datadog, Composio, Paystack, model providers) is optional and documented in [`.env.example`](.env.example) and [docs/CONNECTORS.md](docs/CONNECTORS.md).
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Start the dev server |
+| `npm run build:node` | Production build for a Node server (`.output/`) |
+| `npm test` | Run the server-logic test suites |
+| `npm run test:e2e` | Browser smoke tests (see [docs/TESTING.md](docs/TESTING.md)) |
+| `npm run lint` | ESLint |
+
+## Deployment
+
+The same build runs on **Vercel** (serverless) or **Azure Container Apps** (containers, with autoscaling and a per-server AI load gate). The Azure path ships with a GitHub Actions workflow and a Dockerfile. Scheduled jobs (daily checks, hourly cleanup of expired files and demo sessions) run from GitHub Actions or Vercel Cron.
+
+- [docs/AZURE.md](docs/AZURE.md): deploy to Azure
+- [docs/SCALING.md](docs/SCALING.md): how it handles many users
+- [docs/MONITORING.md](docs/MONITORING.md): Sentry and Datadog
+
+## Documentation
+
+| Topic | File |
+|---|---|
+| How it works | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Plans, credits, payments | [BILLING.md](docs/BILLING.md) |
+| Demo mode and usage limits | [DEMO-AND-LIMITS.md](docs/DEMO-AND-LIMITS.md) |
+| Connectors | [CONNECTORS.md](docs/CONNECTORS.md) |
+| Skills | [SKILLS.md](docs/SKILLS.md) |
+| n8n without credential setup | [N8N-CREDENTIALLESS.md](docs/N8N-CREDENTIALLESS.md) |
+| Approvals, undo, privacy | [TRUST-LAYER.md](docs/TRUST-LAYER.md) |
+| Security | [SECURITY.md](docs/SECURITY.md) |
+| Testing | [TESTING.md](docs/TESTING.md) |
+
+## Contributing
+
+Issues and pull requests are welcome. Before opening a pull request, run `npm run lint`, `npx tsc --noEmit` and `npm test`. To report a security problem, please email the maintainer instead of opening a public issue.
+
+## License
+
+Released under the [MIT License](LICENSE). Copyright © 2026 Oluwafemi27.

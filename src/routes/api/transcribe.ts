@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { json, requireUser } from "@/lib/server/require-admin";
+import { json, requireUser, requireRealUser } from "@/lib/server/require-admin";
 import { scanMediaPiece } from "@/lib/server/file-scan";
 import {
   MAX_TRANSCRIBE_BYTES,
@@ -13,7 +13,7 @@ export const Route = createFileRoute("/api/transcribe")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const auth = await requireUser(request);
+        const auth = await requireRealUser(request);
         if (!auth.ok) return auth.response;
         return withRateLimit(`transcribe:${auth.userId}`, LIMITS.transcribe, async () => {
           const mime =

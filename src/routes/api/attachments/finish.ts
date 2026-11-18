@@ -6,7 +6,7 @@ import {
   assertTokensAvailable,
   withBilling,
 } from "@/lib/server/billing";
-import { json, requireUser } from "@/lib/server/require-admin";
+import { json, requireUser, requireRealUser } from "@/lib/server/require-admin";
 import { finishUpload } from "@/lib/server/attachments";
 import { LIMITS, withRateLimit } from "@/lib/server/rate-limit";
 
@@ -20,7 +20,7 @@ export const Route = createFileRoute("/api/attachments/finish")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const auth = await requireUser(request);
+        const auth = await requireRealUser(request);
         if (!auth.ok) return auth.response;
         return withRateLimit(`read:${auth.userId}`, LIMITS.read, async () => {
           const parsed = body.safeParse(await request.json().catch(() => null));

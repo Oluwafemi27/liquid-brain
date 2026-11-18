@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { purgeExpiredDemo } from "@/lib/server/demo";
 import { purgeExpiredFiles } from "@/lib/server/file-retention";
 import { safeEqual } from "@/lib/server/signed-links";
 
-/** Deletes expired and abandoned uploads. Call it every hour or so from any scheduler (GitHub Actions,
+/** Deletes expired and abandoned uploads, and ends demo visits that have run out (24 hours by default). Call it every hour or so from any scheduler (GitHub Actions,
  *  Azure, cron-job.org) with `Authorization: Bearer <CRON_SECRET>`. The Azure container also runs it
  *  by itself every 15 minutes, and uploads trigger it opportunistically. */
 export const Route = createFileRoute("/api/cron/purge-files")({
@@ -13,7 +14,12 @@ export const Route = createFileRoute("/api/cron/purge-files")({
         if (!secret || !safeEqual(request.headers.get("authorization"), `Bearer ${secret}`)) {
           return new Response("Unauthorized", { status: 401 });
         }
-        return Response.json({ ok: true, ...(await purgeExpiredFiles()) });
+        const demo = await purgeExpiredDemo().catch(() => 0);
+        return Response.json({
+          ok: true,
+          ...(await purgeExpiredFiles()),
+          demoSessionsDeleted: demo,
+        });
       },
     },
   },

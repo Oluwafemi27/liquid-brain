@@ -16,7 +16,9 @@ const flag = (name, fallback) => {
   return i >= 0 && args[i + 1] ? args[i + 1] : fallback;
 };
 if (!base) {
-  console.error("Usage: node tools/load-test.mjs <base-url> [--users 500] [--seconds 60] [--paths /,/api/health] [--think 800] [--token <jwt>]");
+  console.error(
+    "Usage: node tools/load-test.mjs <base-url> [--users 500] [--seconds 60] [--paths /,/api/health] [--think 800] [--token <jwt>]",
+  );
   process.exit(2);
 }
 const users = Number(flag("users", 200));
@@ -56,19 +58,40 @@ async function user(i) {
   }
 }
 
-const pct = (p) => latencies.length ? latencies.slice().sort((a, b) => a - b)[Math.min(latencies.length - 1, Math.floor((p / 100) * latencies.length))] : 0;
+const pct = (p) =>
+  latencies.length
+    ? latencies.slice().sort((a, b) => a - b)[
+        Math.min(latencies.length - 1, Math.floor((p / 100) * latencies.length))
+      ]
+    : 0;
 
 console.log(`Load test: ${users} users for ${seconds}s on ${base}  paths: ${paths.join(", ")}`);
-const tick = setInterval(() => process.stdout.write(`  ${Math.round((Date.now() - started) / 1000)}s  requests ${latencies.length + errors}  errors ${errors}\r`), 2000);
+const tick = setInterval(
+  () =>
+    process.stdout.write(
+      `  ${Math.round((Date.now() - started) / 1000)}s  requests ${latencies.length + errors}  errors ${errors}\r`,
+    ),
+  2000,
+);
 await Promise.all(Array.from({ length: users }, (_, i) => user(i)));
 clearInterval(tick);
 
 const total = latencies.length + errors;
 const elapsed = (Date.now() - started) / 1000;
 const bad = [...statuses].filter(([s]) => s >= 500).reduce((n, [, c]) => n + c, 0) + errors;
-console.log(`\nRequests: ${total}  (${(total / elapsed).toFixed(1)}/s)   Failed: ${bad} (${total ? ((bad / total) * 100).toFixed(2) : 0}%)`);
-console.log(`Status codes: ${[...statuses].map(([s, c]) => `${s}x${c}`).join("  ")}${errors ? `  network-errors x${errors}` : ""}`);
-console.log(`Latency ms: p50 ${pct(50).toFixed(0)}  p95 ${pct(95).toFixed(0)}  p99 ${pct(99).toFixed(0)}  max ${pct(100).toFixed(0)}`);
+console.log(
+  `\nRequests: ${total}  (${(total / elapsed).toFixed(1)}/s)   Failed: ${bad} (${total ? ((bad / total) * 100).toFixed(2) : 0}%)`,
+);
+console.log(
+  `Status codes: ${[...statuses].map(([s, c]) => `${s}x${c}`).join("  ")}${errors ? `  network-errors x${errors}` : ""}`,
+);
+console.log(
+  `Latency ms: p50 ${pct(50).toFixed(0)}  p95 ${pct(95).toFixed(0)}  p99 ${pct(99).toFixed(0)}  max ${pct(100).toFixed(0)}`,
+);
 const pass = total > 0 && bad / total < 0.01 && pct(95) < 2000;
-console.log(pass ? "RESULT: PASS (under 1% failures, p95 under 2s)" : "RESULT: NEEDS ATTENTION (more than 1% failures or p95 over 2s)");
+console.log(
+  pass
+    ? "RESULT: PASS (under 1% failures, p95 under 2s)"
+    : "RESULT: NEEDS ATTENTION (more than 1% failures or p95 over 2s)",
+);
 process.exit(pass ? 0 : 1);

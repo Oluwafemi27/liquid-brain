@@ -1,5 +1,12 @@
 {
   "name": "tanstack_start_ts",
+  "description": "ADUF AI — an always-on AI COO for small businesses",
+  "license": "MIT",
+  "author": "Oluwafemi27",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Oluwafemi27/liquid-brain.git"
+  },
   "private": true,
   "sideEffects": false,
   "type": "module",

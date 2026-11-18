@@ -1,4 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getUsageSnapshot } from "@/lib/server/usage";
+import {
+  DEMO_BLOCKED_MESSAGE,
+  demoKeyOwnerId,
+  getDemoSettings,
+  getDemoStats,
+  updateDemoSettings,
+} from "@/lib/server/demo";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 import {
@@ -448,6 +456,7 @@ export const activateN8nDeploymentFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await verifyAccessToken(data.accessToken);
     if (!user) throw new Error("Not signed in.");
+    if (user.demo) throw new Error(DEMO_BLOCKED_MESSAGE);
     return activateDeployment(user.id, data.deploymentId);
   });
 
@@ -456,6 +465,7 @@ export const deactivateN8nDeploymentFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await verifyAccessToken(data.accessToken);
     if (!user) throw new Error("Not signed in.");
+    if (user.demo) throw new Error(DEMO_BLOCKED_MESSAGE);
     return deactivateDeployment(user.id, data.deploymentId);
   });
 
@@ -640,6 +650,7 @@ export const importTableFn = createServerFn({ method: "POST" })
     guarded(async () => {
       const user = await verifyAccessToken(data.accessToken);
       if (!user) throw new ImportError(NOT_SIGNED_IN, "reauth");
+      if (user.demo) throw new ImportError(DEMO_BLOCKED_MESSAGE, "not_connected");
       const outcome = await importTable(user.id, {
         source: data.source,
         sourceRef: data.sourceRef,
@@ -685,6 +696,7 @@ export const importGaFn = createServerFn({ method: "POST" })
     guarded(async () => {
       const user = await verifyAccessToken(data.accessToken);
       if (!user) throw new ImportError(NOT_SIGNED_IN, "reauth");
+      if (user.demo) throw new ImportError(DEMO_BLOCKED_MESSAGE, "not_connected");
       const { months, currency } = await fetchGaMonths(user.id, data.propertyId);
       const outcome = await importGaMonths(user.id, {
         propertyId: data.propertyId,
@@ -702,6 +714,7 @@ export const importGmailLeadsFn = createServerFn({ method: "POST" })
     guarded(async () => {
       const user = await verifyAccessToken(data.accessToken);
       if (!user) throw new ImportError(NOT_SIGNED_IN, "reauth");
+      if (user.demo) throw new ImportError(DEMO_BLOCKED_MESSAGE, "not_connected");
       const found = await fetchGmailLeads(user.id);
       const outcome = await importGmailLeads(user.id, found);
       return { outcome };
@@ -714,6 +727,7 @@ export const deleteImportFn = createServerFn({ method: "POST" })
     guarded(async () => {
       const user = await verifyAccessToken(data.accessToken);
       if (!user) throw new ImportError(NOT_SIGNED_IN, "reauth");
+      if (user.demo) throw new ImportError(DEMO_BLOCKED_MESSAGE, "not_connected");
       await deleteImport(user.id, data.importId);
       return {};
     }),
@@ -893,6 +907,7 @@ export const resyncImportFn = createServerFn({ method: "POST" })
     guarded(async () => {
       const user = await verifyAccessToken(data.accessToken);
       if (!user) throw new ImportError(NOT_SIGNED_IN, "reauth");
+      if (user.demo) throw new ImportError(DEMO_BLOCKED_MESSAGE, "not_connected");
       const out = await resyncImport(user.id, data.importId);
       if (!out.ok) throw new ImportError(out.message, "api");
       return { message: out.message };
@@ -980,6 +995,12 @@ async function signedIn(accessToken: string | null) {
   if (!user) throw new BillingError(NOT_SIGNED_IN);
   return user;
 }
+/** Like signedIn, but refuses demo visitors (payments, promo codes). */
+async function signedInReal(accessToken: string | null) {
+  const user = await signedIn(accessToken);
+  if (user.demo) throw new BillingError(DEMO_BLOCKED_MESSAGE);
+  return user;
+}
 async function adminOnly(accessToken: string | null) {
   const ctx = await asAdmin(accessToken);
   if (!ctx) throw new BillingError("Admins only.");
@@ -1026,7 +1047,7 @@ export const startCheckoutFn = createServerFn({ method: "POST" })
   .validator((data: z.infer<typeof checkoutSchema>) => checkoutSchema.parse(data))
   .handler(async ({ data }) =>
     guarded(async () => {
-      const user = await signedIn(data.accessToken);
+      const user = await signedInReal(data.accessToken);
       const { accessToken: _t, ...input } = data;
       return await startCheckout({ id: user.id, email: user.email ?? null }, input);
     }),
@@ -1040,7 +1061,7 @@ export const verifyPaymentFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) =>
     guarded(async () => {
-      const user = await signedIn(data.accessToken);
+      const user = await signedInReal(data.accessToken);
       return await verifyByReference(user.id, data.reference);
     }),
   );
@@ -1052,7 +1073,7 @@ export const applyPromoFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) =>
     guarded(async () => {
-      const user = await signedIn(data.accessToken);
+      const user = await signedInReal(data.accessToken);
       const preview = await previewPromo(user.id, data.code);
       if (preview.kind === "percent_off")
         return {
@@ -1189,6 +1210,41 @@ export const adminBillingSettingsFn = createServerFn({ method: "POST" })
     }),
   );
 
+export const adminDemoFn = createServerFn({ method: "POST" })
+  .validator((data: z.infer<typeof tokenOnly>) => tokenOnly.parse(data))
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      await adminOnly(data.accessToken);
+      const [settings, stats, ownerId] = await Promise.all([
+        getDemoSettings(),
+        getDemoStats(),
+        demoKeyOwnerId(),
+      ]);
+      return { settings, stats, ownerFound: Boolean(ownerId) };
+    }),
+  );
+
+export const adminDemoSettingsFn = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      accessToken: string | null;
+      patch: {
+        enabled?: boolean;
+        keyOwnerEmail?: string;
+        sessionHours?: number;
+        dailyCreditCap?: number;
+        perIpHour?: number;
+      };
+    }) => data,
+  )
+  .handler(async ({ data }) =>
+    guarded(async () => {
+      await adminOnly(data.accessToken);
+      await updateDemoSettings(data.patch);
+      return {};
+    }),
+  );
+
 const promoCreateSchema = z.object({
   accessToken: z.string().nullable(),
   kind: z.enum(["percent_off", "free_plan", "bonus_tokens"]),
@@ -1288,6 +1344,7 @@ export const importFromConnectorFn = createServerFn({ method: "POST" })
     guarded(async () => {
       const user = await verifyAccessToken(data.accessToken);
       if (!user) throw new ImportError(NOT_SIGNED_IN, "reauth");
+      if (user.demo) throw new ImportError(DEMO_BLOCKED_MESSAGE, "not_connected");
       const imported = await importFromConnector(user.id, data.connectorId);
       await logEvent(user.id, {
         platform: data.connectorId,
@@ -1325,6 +1382,7 @@ export const requestConnectorFn = createServerFn({ method: "POST" })
     guarded(async () => {
       const user = await verifyAccessToken(data.accessToken);
       if (!user) throw new ImportError(NOT_SIGNED_IN, "reauth");
+      if (user.demo) throw new ImportError(DEMO_BLOCKED_MESSAGE, "not_connected");
       const db = getSupabaseAdmin();
       if (!db) throw new ImportError("The backend isn't configured.", "no_backend");
       // Keep it from becoming a spam channel: 5 requests a day per person.
@@ -1372,6 +1430,24 @@ export const adminConnectorRequestsFn = createServerFn({ method: "POST" })
       tally.set(key, t);
     }
     return [...tally.values()].sort((a, b) => b.count - a.count);
+  });
+
+/** What the person has used this term, their hit limits, and how close they are: powers the usage meter,
+ *  the billing page's usage card and the warnings. */
+export const fetchUsageFn = createServerFn({ method: "POST" })
+  .validator((data: z.infer<typeof tokenOnly>) => tokenOnly.parse(data))
+  .handler(async ({ data }) => {
+    const user = await verifyAccessToken(data.accessToken);
+    if (!user) return null;
+    try {
+      return {
+        usage: await getUsageSnapshot(user.id),
+        demo: user.demo ? { expiresAt: new Date(user.demo.expiresAt).toISOString() } : null,
+      };
+    } catch (e) {
+      console.error("[usage] snapshot failed", e);
+      return null;
+    }
   });
 
 /** Light version of fetchBillingFn for chips and summaries: just the plan and token balance. */

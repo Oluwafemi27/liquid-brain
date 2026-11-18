@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { purgeExpiredDemo } from "./demo";
 import { getSupabaseAdmin } from "./supabase";
 
 // How long uploaded files live. The rule: no original file stays longer than 24 hours, and big
@@ -163,7 +164,7 @@ export function maybePurge(everyMs = 10 * 60_000): void {
   const now = Date.now();
   if (running || now - lastPurge < everyMs) return;
   lastPurge = now;
-  running = purgeExpiredFiles()
+  running = Promise.all([purgeExpiredFiles(), purgeExpiredDemo()])
     .catch((e) => console.error("[purge] failed", e))
     .finally(() => {
       running = null;

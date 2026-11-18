@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { demoExpiry } from "./demo";
 import { getKv, hashKey } from "./kv";
 import { getSupabaseAdmin, DEFAULT_WORKSPACE_ID } from "./supabase";
 
@@ -7,6 +8,8 @@ export interface AuthedUser {
   email: string | null;
   /** False when the address was typed at sign-up but never confirmed: it proves nothing about who owns it. */
   emailVerified: boolean;
+  /** Present only for "Continue as demo" visitors: when their demo ends (ms since epoch). */
+  demo?: { expiresAt: number };
 }
 
 /** Verifies a Supabase Auth access token (from the browser session) against
@@ -44,11 +47,18 @@ export async function verifyAccessToken(
     }
     const { data, error } = await db.auth.getUser(token);
     if (error || !data.user) return null;
-    const user = {
+    const user: AuthedUser = {
       id: data.user.id,
       email: data.user.email ?? null,
       emailVerified: Boolean(data.user.email_confirmed_at),
     };
+    // A demo visitor's account is only good until their demo ends; after that the token is refused
+    // straight away, even before the cleanup job has deleted the account.
+    if (data.user.app_metadata?.["demo"]) {
+      const expiresAt = await demoExpiry(data.user.id);
+      if (!expiresAt) return null;
+      user.demo = { expiresAt };
+    }
     if (tokenCache.size >= TOKEN_CACHE_MAX)
       tokenCache.delete(tokenCache.keys().next().value as string);
     tokenCache.set(token, { user, until: Date.now() + TOKEN_CACHE_MS });

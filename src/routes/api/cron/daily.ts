@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { runAlertCycle, sendDigest } from "@/lib/server/alerts";
+import { purgeExpiredDemo } from "@/lib/server/demo";
 import { checkAllConnections } from "@/lib/server/connection-health";
 import { purgeExpiredFiles } from "@/lib/server/file-retention";
 import { resyncDue } from "@/lib/server/import-sync";
@@ -58,7 +59,8 @@ export const Route = createFileRoute("/api/cron/daily")({
             console.error("[cron] user cycle failed", uid, e);
           }
         }
-        return Response.json({ ok: true, ...summary, purged });
+        const demoPurged = await purgeExpiredDemo().catch(() => 0);
+        return Response.json({ ok: true, ...summary, purged, demoPurged });
       },
     },
   },

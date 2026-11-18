@@ -32,9 +32,7 @@ const SKIP_NAMES = new Set(["package.json", "package-lock.json", "tsconfig.json"
 function integrationFromNodeType(type) {
   if (!type) return null;
   const last = type.split(".").pop() || type;
-  return last
-    .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .toLowerCase();
+  return last.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
 }
 
 const TRIGGER_HINTS = ["trigger", "webhook", "cron", "schedule", "poll"];
@@ -81,7 +79,8 @@ function extractDescription(wf, fallbackName) {
   // Community exports often stash a human description in a Sticky Note
   // node, or in a top-level "meta"/"description" field. Fall back to the
   // filename-derived name if nothing else is present.
-  if (typeof wf.description === "string" && wf.description.trim()) return firstSentence(wf.description);
+  if (typeof wf.description === "string" && wf.description.trim())
+    return firstSentence(wf.description);
   const sticky = (wf.nodes || []).find((n) => (n?.type || "").toLowerCase().includes("stickynote"));
   const stickyText = sticky?.parameters?.content;
   if (typeof stickyText === "string" && stickyText.trim()) return firstSentence(stickyText);
@@ -157,14 +156,29 @@ for (const { dir, repo } of REPOS) {
 
     const relPath = relative(reposDir, file);
     const fallbackName = nameFromFilename(file);
-    const name = (typeof wf.name === "string" && wf.name.trim()) || fallbackName || "Untitled workflow";
+    const name =
+      (typeof wf.name === "string" && wf.name.trim()) || fallbackName || "Untitled workflow";
     const description = extractDescription(wf, fallbackName);
     const integrations = [
       ...new Set(
         wf.nodes
           .map((n) => integrationFromNodeType(n?.type))
           .filter(Boolean)
-          .filter((s) => !["stickynote", "set", "no-op", "merge", "code", "function", "if", "switch", "split-in-batches", "wait"].includes(s)),
+          .filter(
+            (s) =>
+              ![
+                "stickynote",
+                "set",
+                "no-op",
+                "merge",
+                "code",
+                "function",
+                "if",
+                "switch",
+                "split-in-batches",
+                "wait",
+              ].includes(s),
+          ),
       ),
     ].slice(0, 25);
     const triggerType = classifyTrigger(wf.nodes);

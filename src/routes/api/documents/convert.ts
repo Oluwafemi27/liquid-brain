@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/server/require-admin";
+import { requireUser, requireRealUser } from "@/lib/server/require-admin";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { convertDocument } from "@/lib/server/documents";
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/api/documents/convert")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const auth = await requireUser(request);
+        const auth = await requireRealUser(request);
         if (!auth.ok) return auth.response;
         let raw: unknown;
         try {

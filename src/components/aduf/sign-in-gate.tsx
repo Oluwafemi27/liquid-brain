@@ -1,4 +1,5 @@
 import { PricingSection } from "./pricing-section";
+import { DemoCta } from "./demo-cta";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -356,6 +357,7 @@ export function SignInGate({ loading: _loading }: { loading: boolean }) {
             >
               <GoogleCta redirecting={redirecting} onClick={handleGoogleClick} />
             </div>
+            <DemoCta className="mx-auto mt-3 w-full max-w-xs lg:mx-0" />
             <div className="mt-4 flex justify-center lg:justify-start">
               <EmailSignIn />
             </div>
@@ -588,6 +590,7 @@ export function SignInGate({ loading: _loading }: { loading: boolean }) {
             in minutes.
           </p>
           <GoogleCta redirecting={redirecting} onClick={handleGoogleClick} />
+          <DemoCta className="w-full max-w-xs" />
           <EmailSignIn />
         </motion.div>
       </section>

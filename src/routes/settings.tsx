@@ -1,4 +1,5 @@
 import { PlanSummaryCard } from "@/components/aduf/plan-summary";
+import { UsagePanel } from "@/components/aduf/usage-panel";
 import { DataPrivacyPanel } from "@/components/aduf/data-privacy-panel";
 import { IntegrationAccess } from "@/components/aduf/integration-access";
 import { SafetyPanel } from "@/components/aduf/safety-panel";
@@ -134,7 +135,11 @@ function SettingsPage() {
     }
   }, [setSourceConnected]);
 
-  const tabs = TABS.filter((t) => !t.adminOnly || isAdmin);
+  const isDemo = Boolean(user?.demo);
+  // A demo visit is a private look around: no connections, no privacy/data tools, no admin.
+  const tabs = TABS.filter(
+    (t) => (!t.adminOnly || isAdmin) && (!isDemo || t.id === "plan" || t.id === "safety"),
+  );
   const active = tabs.some((t) => t.id === tab) ? tab : "plan";
 
   return (
@@ -203,7 +208,12 @@ function SettingsPage() {
               </GlassCard>
             ) : null}
 
-            {active === "plan" ? <PlanSummaryCard /> : null}
+            {active === "plan" ? (
+              <div className="space-y-6">
+                {isDemo ? null : <PlanSummaryCard />}
+                <UsagePanel />
+              </div>
+            ) : null}
 
             {active === "connections" ? (
               <div className="space-y-6">

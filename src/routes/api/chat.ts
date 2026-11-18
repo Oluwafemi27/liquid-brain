@@ -9,10 +9,13 @@ import {
 import { analyzeMedia } from "@/lib/server/vision";
 import {
   EntitlementError,
+  HitLimitError,
   QuotaExceededError,
   assertTokensAvailable,
   withBilling,
 } from "@/lib/server/billing";
+import { DEMO_BLOCKED_MESSAGE } from "@/lib/server/demo";
+import { enforceHitLimit } from "@/lib/server/usage";
 import { proposeAction } from "@/lib/server/actions";
 import { buildFactsSheet } from "@/lib/server/verdict";
 import { connectedAppsContext } from "@/lib/server/composio-sync";
@@ -247,6 +250,21 @@ async function handleChat(
         "Easy there — ADUF is still working on your last messages. Try again in a few seconds.",
       );
     onDone(gate.release);
+
+    // The plan's per-hour / per-day cap on AI replies. Checked before any expensive work, and the
+    // answer is a normal in-chat message plus the details the screen needs to show a proper notice.
+    try {
+      await enforceHitLimit(userId);
+    } catch (e) {
+      if (e instanceof HitLimitError)
+        return json({
+          reply: e.message,
+          question: null,
+          trace: [],
+          limit: { scope: e.scope, limit: e.limit, resetsAt: e.resetsAt },
+        });
+      throw e;
+    }
   }
 
   // What the model actually reads: the text of every attached file (read once, on upload),
@@ -355,7 +373,7 @@ async function handleChat(
     if (authedUser) await assertTokensAvailable(authedUser.id);
     const tModelStart = Date.now();
     const { result, trace } = authedUser
-      ? await withBilling({ userId: authedUser.id, feature: "chat" }, run)
+      ? await withBilling({ userId: authedUser.id, feature: "chat", hitCounted: true }, run)
       : await run();
     // Resolve [S#] citations to real sources; strip the markers from what the owner reads.
     const cited = new Set([...result.reply.matchAll(/\[S(\d+)\]/g)].map((m) => `S${m[1]}`));
@@ -424,8 +442,23 @@ async function handleChat(
     );
   } catch (error) {
     if (error instanceof QuotaExceededError || error instanceof EntitlementError) {
-      void logMessage(userId, sessionId, "aduf", error.message);
-      return json({ reply: error.message, question: null, trace: [], paywall: true });
+      // Demo visitors can't upgrade or top up, so point them at signing in instead.
+      const text =
+        authedUser?.demo && !(error instanceof HitLimitError)
+          ? error instanceof EntitlementError
+            ? DEMO_BLOCKED_MESSAGE
+            : "The demo credits are used up. Sign in with Google to keep going with your own."
+          : error.message;
+      void logMessage(userId, sessionId, "aduf", text);
+      return json({
+        reply: text,
+        question: null,
+        trace: [],
+        paywall: true,
+        ...(error instanceof HitLimitError
+          ? { limit: { scope: error.scope, limit: error.limit, resetsAt: error.resetsAt } }
+          : { limit: { scope: "credits" as const, limit: 0, resetsAt: null } }),
+      });
     }
     if (error instanceof NoModelConfiguredError) {
       void logMessage(userId, sessionId, "aduf", error.message);

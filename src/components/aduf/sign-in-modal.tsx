@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DemoCta } from "./demo-cta";
 import { BrandLogo } from "./brand-logo";
 import {
   Dialog,
@@ -76,8 +77,10 @@ export function SignInModal() {
           {loading ? "Redirecting…" : "Continue with Google"}
         </button>
 
+        <DemoCta className="mt-1" />
+
         <p className="mt-1 text-center text-[11px] text-muted-foreground">
-          That's the only sign-in method — no separate email/password account needed.
+          No separate email/password account needed.
         </p>
       </DialogContent>
     </Dialog>

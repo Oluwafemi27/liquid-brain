@@ -25,13 +25,15 @@ function loadDir(sub) {
   } catch {
     return [];
   }
-  return files.map((f) => {
-    try {
-      return JSON.parse(readFileSync(join(full, f), "utf8"));
-    } catch {
-      return null;
-    }
-  }).filter(Boolean);
+  return files
+    .map((f) => {
+      try {
+        return JSON.parse(readFileSync(join(full, f), "utf8"));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
 }
 
 const meta = JSON.parse(readFileSync(join(dir, "schemas", "_meta.json"), "utf8"));
@@ -47,8 +49,12 @@ for (const n of nodes) {
     .map((p) => p.name);
   // "operation"/"resource" enums are the #1 thing generated JSON gets wrong
   // (inventing a resource/operation combo that doesn't exist on that node).
-  const operationProp = (n.properties || []).find((p) => p.name === "operation" && Array.isArray(p.options));
-  const resourceProp = (n.properties || []).find((p) => p.name === "resource" && Array.isArray(p.options));
+  const operationProp = (n.properties || []).find(
+    (p) => p.name === "operation" && Array.isArray(p.options),
+  );
+  const resourceProp = (n.properties || []).find(
+    (p) => p.name === "resource" && Array.isArray(p.options),
+  );
   nodeIndex[type] = {
     displayName: n.displayName || n.name,
     group: n.group || [],
@@ -82,4 +88,6 @@ process.stdout.write(
     0,
   ),
 );
-console.error(`nodes=${Object.keys(nodeIndex).length} credentials=${Object.keys(credentialIndex).length}`);
+console.error(
+  `nodes=${Object.keys(nodeIndex).length} credentials=${Object.keys(credentialIndex).length}`,
+);

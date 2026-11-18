@@ -1,5 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { isAdminEmail } from "./admin";
+import { DEMO_BLOCKED_MESSAGE } from "./demo";
 import { verifyAccessToken } from "./survey";
 
 export type AdminCheck = { ok: true; userId: string } | { ok: false; response: Response };
@@ -33,7 +34,8 @@ export async function requireAdmin(
 }
 
 export type UserCheck =
-  { ok: true; userId: string; email: string | null } | { ok: false; response: Response };
+  | { ok: true; userId: string; email: string | null; demo: boolean }
+  | { ok: false; response: Response };
 
 /** Any signed-in user (Supabase session token verified server-side). Use on every route that
  *  spends money (AI, sandbox) or touches stored data — never trust an unauthenticated request. */
@@ -42,5 +44,14 @@ export async function requireUser(request: Request): Promise<UserCheck> {
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   const user = await verifyAccessToken(token);
   if (!user) return { ok: false, response: json({ error: "Sign in first." }, 401) };
-  return { ok: true, userId: user.id, email: user.email ?? null };
+  return { ok: true, userId: user.id, email: user.email ?? null, demo: Boolean(user.demo) };
+}
+
+/** Like requireUser, but refuses "Continue as demo" visitors. Use on everything that connects an outside
+ *  account, stores a key, takes a payment, uploads a file or otherwise spends the owner's resources. */
+export async function requireRealUser(request: Request): Promise<UserCheck> {
+  const auth = await requireUser(request);
+  if (auth.ok && auth.demo)
+    return { ok: false, response: json({ error: DEMO_BLOCKED_MESSAGE, demo: true }, 403) };
+  return auth;
 }

@@ -3,7 +3,13 @@ import path from "node:path";
 
 // Regression guard: one person's keys, tokens and connections must never be readable by another
 // account. The modules below hold secrets, so none of them may use the shared "default" workspace.
-const ok = (c: unknown, m: string) => { if (!c) { console.error("FAIL", m); process.exit(1); } console.log("ok  ", m); };
+const ok = (c: unknown, m: string) => {
+  if (!c) {
+    console.error("FAIL", m);
+    process.exit(1);
+  }
+  console.log("ok  ", m);
+};
 const root = path.resolve(process.cwd(), "src");
 const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
 
@@ -17,16 +23,32 @@ const SECRET_HOLDERS = [
   "lib/server/n8n-connection.ts",
   "skills/services/meta-ads.ts",
 ];
-for (const f of SECRET_HOLDERS) ok(!/DEFAULT_WORKSPACE_ID/.test(read(f)), `${f} never uses the shared workspace`);
+for (const f of SECRET_HOLDERS)
+  ok(!/DEFAULT_WORKSPACE_ID/.test(read(f)), `${f} never uses the shared workspace`);
 
 // Every function that reads a key or token takes the owner as its first argument.
-const sig = (file: string, name: string) => new RegExp(`function ${name}\\(\\s*userId: string`).test(read(file));
+const sig = (file: string, name: string) =>
+  new RegExp(`function ${name}\\(\\s*userId: string`).test(read(file));
 ok(sig("lib/server/model-keys.ts", "resolveModelKey"), "resolveModelKey takes the owner");
-ok(/function resolveDefaultModelKey\(userId: string \| null\)/.test(read("lib/server/model-keys.ts")), "resolveDefaultModelKey takes the owner");
+ok(
+  /function resolveDefaultModelKey\(userId: string \| null\)/.test(
+    read("lib/server/model-keys.ts"),
+  ),
+  "resolveDefaultModelKey takes the owner",
+);
 ok(sig("lib/server/model-keys.ts", "storeModelKey"), "storeModelKey takes the owner");
-ok(sig("lib/server/google-auth.ts", "getGoogleAccessToken"), "getGoogleAccessToken takes the owner");
-ok(sig("lib/server/connector-keys.ts", "resolveConnectorSecret"), "resolveConnectorSecret takes the owner");
-ok(sig("lib/server/n8n-connection.ts", "resolveN8nConnection"), "resolveN8nConnection takes the owner");
+ok(
+  sig("lib/server/google-auth.ts", "getGoogleAccessToken"),
+  "getGoogleAccessToken takes the owner",
+);
+ok(
+  sig("lib/server/connector-keys.ts", "resolveConnectorSecret"),
+  "resolveConnectorSecret takes the owner",
+);
+ok(
+  sig("lib/server/n8n-connection.ts", "resolveN8nConnection"),
+  "resolveN8nConnection takes the owner",
+);
 
 // The model-key API is per account, not admin-only and not shared.
 const route = read("routes/api/model-keys.ts");
@@ -41,9 +63,14 @@ function walk(dir: string, out: string[] = []): string[] {
   }
   return out;
 }
-const rpcs = /(get_decrypted_model_key|store_model_key|get_default_model_key|get_decrypted_connector_secret|store_connector_secret|get_decrypted_n8n_connection)/;
+const rpcs =
+  /(get_decrypted_model_key|store_model_key|get_default_model_key|get_decrypted_connector_secret|store_connector_secret|get_decrypted_n8n_connection)/;
 for (const f of walk(root)) {
   const s = readFileSync(f, "utf8");
-  if (rpcs.test(s)) ok(!/p_workspace_id:\s*DEFAULT_WORKSPACE_ID/.test(s), `${path.relative(root, f)} passes an owner, not the shared workspace, to secret RPCs`);
+  if (rpcs.test(s))
+    ok(
+      !/p_workspace_id:\s*DEFAULT_WORKSPACE_ID/.test(s),
+      `${path.relative(root, f)} passes an owner, not the shared workspace, to secret RPCs`,
+    );
 }
 console.log("done");

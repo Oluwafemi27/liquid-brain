@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { disconnectConnector, saveConnectorKeys } from "@/lib/server/connector-keys";
 import { getProvider } from "@/lib/server/oauth-providers";
-import { json, requireUser } from "@/lib/server/require-admin";
+import { json, requireUser, requireRealUser } from "@/lib/server/require-admin";
 
 const bodySchema = z.record(z.string().max(2000));
 
@@ -20,7 +20,7 @@ export const Route = createFileRoute("/api/connectors/$provider/manage")({
           { status: 410 },
         ),
       DELETE: async ({ request, params }) => {
-        const admin = await requireUser(request);
+        const admin = await requireRealUser(request);
         if (!admin.ok) return admin.response;
         if (params.provider === "telegram") return json({ error: "Use the Telegram panel." }, 400);
         if (!getProvider(params.provider)) return json({ error: "Unknown integration." }, 404);

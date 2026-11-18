@@ -1,9 +1,18 @@
 import { cleanTranscript } from "@/lib/server/transcribe";
 
-const ok = (c: unknown, m: string) => { if (!c) { console.error("FAIL", m); process.exit(1); } console.log("ok  ", m); };
+const ok = (c: unknown, m: string) => {
+  if (!c) {
+    console.error("FAIL", m);
+    process.exit(1);
+  }
+  console.log("ok  ", m);
+};
 
 ok(cleanTranscript({ text: "Thank you." }) === "", "a stock phrase on silence is dropped");
-ok(cleanTranscript({ text: "  Our order shipped Monday. " }) === "Our order shipped Monday.", "real speech is kept and trimmed");
+ok(
+  cleanTranscript({ text: "  Our order shipped Monday. " }) === "Our order shipped Monday.",
+  "real speech is kept and trimmed",
+);
 ok(
   cleanTranscript({
     segments: [
@@ -14,5 +23,10 @@ ok(
   }) === "Hello team the total is 5,000 naira",
   "a silence segment in the middle is removed",
 );
-ok(cleanTranscript({ segments: [{ text: "la la la la", avg_logprob: -0.3, compression_ratio: 3.4 }] }) === "", "a repeating loop is removed");
+ok(
+  cleanTranscript({
+    segments: [{ text: "la la la la", avg_logprob: -0.3, compression_ratio: 3.4 }],
+  }) === "",
+  "a repeating loop is removed",
+);
 console.log("done");

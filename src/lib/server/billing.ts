@@ -12,6 +12,7 @@ import {
   type TokenPack,
   type UsageByFeature,
 } from "@/lib/billing-types";
+import { countDemoCredits } from "./demo";
 import { getSupabaseAdmin } from "./supabase";
 
 type Row = Record<string, unknown>;
@@ -22,6 +23,25 @@ export class QuotaExceededError extends Error {
   ) {
     super(message);
     this.name = "QuotaExceededError";
+  }
+}
+/** The person has reached a per-hour or per-day cap on AI actions (or the shared demo is full). It IS a
+ *  quota error, so every place that already handles running out of credits handles this too. */
+export class HitLimitError extends QuotaExceededError {
+  scope: "hour" | "day" | "demo-capacity";
+  limit: number;
+  resetsAt: string;
+  constructor(
+    message: string,
+    scope: "hour" | "day" | "demo-capacity",
+    limit: number,
+    resetsAt: string,
+  ) {
+    super(message);
+    this.name = "HitLimitError";
+    this.scope = scope;
+    this.limit = limit;
+    this.resetsAt = resetsAt;
   }
 }
 export class EntitlementError extends Error {
@@ -327,6 +347,9 @@ export interface BillingContext {
   feature: string;
   /** Raw model tokens used so far in this action (filled in by every model call inside it). */
   rawTokens?: number;
+  /** Set when the caller already counted this action against the hit limits (the chat route does,
+   *  before any expensive work), so it isn't counted twice. */
+  hitCounted?: boolean;
 }
 const als = new AsyncLocalStorage<BillingContext>();
 
@@ -347,6 +370,10 @@ export const creditsFor = (rawTokens: number, perCredit: number): number =>
  *  charged once at the end, in credits (so a reply that took three model calls is still one reply). */
 export const withBilling = async <T>(ctx: BillingContext, fn: () => Promise<T>): Promise<T> => {
   const scoped: BillingContext = { ...ctx, rawTokens: 0 };
+  if (!ctx.hitCounted) {
+    const { enforceHitLimit } = await import("./usage");
+    await enforceHitLimit(ctx.userId);
+  }
   try {
     return await als.run(scoped, fn);
   } finally {
@@ -371,6 +398,8 @@ export async function recordUsage(userId: string, tokens: number, feature: strin
     p_feature: feature,
   });
   if (error) console.error("[billing] couldn't record token usage", error.message);
+  // Demo visitors share the owner's key: add their credits to the day's total so the demo's cap holds.
+  if (!error && e.plan.id === "demo") await countDemoCredits(Math.round(tokens));
 }
 
 /** Rough fallback when a provider omits usage: ~4 characters per token. */

@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { DEMO_BLOCKED_MESSAGE } from "@/lib/server/demo";
 import { appBaseUrl } from "@/lib/server/app-url";
 import { verifyAccessToken } from "@/lib/server/survey";
 import { syncComposioConnections } from "@/lib/server/composio-sync";
@@ -53,6 +54,7 @@ export const startComposioConnectFn = createServerFn({ method: "POST" })
     async ({ data }): Promise<{ ok: true; url: string } | { ok: false; message: string }> => {
       const user = await verifyAccessToken(data.accessToken);
       if (!user) return { ok: false, message: "Sign in again to connect an app." };
+      if (user.demo) return { ok: false, message: DEMO_BLOCKED_MESSAGE };
       if (!/^[a-z0-9_-]{1,80}$/i.test(data.slug))
         return { ok: false, message: "That app name isn't valid." };
       const base = appBaseUrl(process.env, data.origin || "");
@@ -82,6 +84,7 @@ export const disconnectComposioFn = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ ok: boolean; message: string }> => {
     const user = await verifyAccessToken(data.accessToken);
     if (!user) return { ok: false, message: "Sign in again to disconnect an app." };
+    if (user.demo) return { ok: false, message: DEMO_BLOCKED_MESSAGE };
     try {
       await disconnect(user.id, data.connectionId);
       return { ok: true, message: "Disconnected." };

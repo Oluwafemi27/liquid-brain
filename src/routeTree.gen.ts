@@ -25,6 +25,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SupplierOrdersRouteImport } from './routes/supplier-orders'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiComposioWebhookRouteImport } from './routes/api/composio-webhook'
+import { Route as ApiDemoRouteImport } from './routes/api/demo'
 import { Route as ApiDocumentsRouteImport } from './routes/api/documents'
 import { Route as ApiFxRouteImport } from './routes/api/fx'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
@@ -135,6 +136,11 @@ const ApiChatRoute = ApiChatRouteImport.update({
 const ApiComposioWebhookRoute = ApiComposioWebhookRouteImport.update({
   id: '/api/composio-webhook',
   path: '/api/composio-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDemoRoute = ApiDemoRouteImport.update({
+  id: '/api/demo',
+  path: '/api/demo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDocumentsRoute = ApiDocumentsRouteImport.update({
@@ -315,6 +321,7 @@ export interface FileRoutesByFullPath {
   '/supplier-orders': typeof SupplierOrdersRoute
   '/api/chat': typeof ApiChatRoute
   '/api/composio-webhook': typeof ApiComposioWebhookRoute
+  '/api/demo': typeof ApiDemoRoute
   '/api/documents': typeof ApiDocumentsRouteWithChildren
   '/api/fx': typeof ApiFxRoute
   '/api/health': typeof ApiHealthRoute
@@ -364,6 +371,7 @@ export interface FileRoutesByTo {
   '/supplier-orders': typeof SupplierOrdersRoute
   '/api/chat': typeof ApiChatRoute
   '/api/composio-webhook': typeof ApiComposioWebhookRoute
+  '/api/demo': typeof ApiDemoRoute
   '/api/documents': typeof ApiDocumentsRouteWithChildren
   '/api/fx': typeof ApiFxRoute
   '/api/health': typeof ApiHealthRoute
@@ -414,6 +422,7 @@ export interface FileRoutesById {
   '/supplier-orders': typeof SupplierOrdersRoute
   '/api/chat': typeof ApiChatRoute
   '/api/composio-webhook': typeof ApiComposioWebhookRoute
+  '/api/demo': typeof ApiDemoRoute
   '/api/documents': typeof ApiDocumentsRouteWithChildren
   '/api/fx': typeof ApiFxRoute
   '/api/health': typeof ApiHealthRoute
@@ -465,6 +474,7 @@ export interface FileRouteTypes {
     | '/supplier-orders'
     | '/api/chat'
     | '/api/composio-webhook'
+    | '/api/demo'
     | '/api/documents'
     | '/api/fx'
     | '/api/health'
@@ -514,6 +524,7 @@ export interface FileRouteTypes {
     | '/supplier-orders'
     | '/api/chat'
     | '/api/composio-webhook'
+    | '/api/demo'
     | '/api/documents'
     | '/api/fx'
     | '/api/health'
@@ -563,6 +574,7 @@ export interface FileRouteTypes {
     | '/supplier-orders'
     | '/api/chat'
     | '/api/composio-webhook'
+    | '/api/demo'
     | '/api/documents'
     | '/api/fx'
     | '/api/health'
@@ -613,6 +625,7 @@ export interface RootRouteChildren {
   SupplierOrdersRoute: typeof SupplierOrdersRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiComposioWebhookRoute: typeof ApiComposioWebhookRoute
+  ApiDemoRoute: typeof ApiDemoRoute
   ApiDocumentsRoute: typeof ApiDocumentsRouteWithChildren
   ApiFxRoute: typeof ApiFxRoute
   ApiHealthRoute: typeof ApiHealthRoute
@@ -750,6 +763,13 @@ declare module '@tanstack/react-router' {
       path: '/api/composio-webhook'
       fullPath: '/api/composio-webhook'
       preLoaderRoute: typeof ApiComposioWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/demo': {
+      id: '/api/demo'
+      path: '/api/demo'
+      fullPath: '/api/demo'
+      preLoaderRoute: typeof ApiDemoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/documents': {
@@ -1036,6 +1056,7 @@ const rootRouteChildren: RootRouteChildren = {
   SupplierOrdersRoute: SupplierOrdersRoute,
   ApiChatRoute: ApiChatRoute,
   ApiComposioWebhookRoute: ApiComposioWebhookRoute,
+  ApiDemoRoute: ApiDemoRoute,
   ApiDocumentsRoute: ApiDocumentsRouteWithChildren,
   ApiFxRoute: ApiFxRoute,
   ApiHealthRoute: ApiHealthRoute,

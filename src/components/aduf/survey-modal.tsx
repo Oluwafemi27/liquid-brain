@@ -45,12 +45,13 @@ const emptySurvey: BusinessSurvey = {
  *  of the context ADUF uses for every analysis (see
  *  src/lib/server/survey.ts#surveyToContext). */
 export function SurveyModal() {
-  const { status, surveyStatus, accessToken, setSurveyStatus } = useAuth();
+  const { status, surveyStatus, accessToken, setSurveyStatus, user } = useAuth();
   const [survey, setSurvey] = useState<BusinessSurvey>(emptySurvey);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const open = status === "signed-in" && surveyStatus === "pending";
+  // Demo visitors skip the questionnaire: there is nothing to personalise in a 24-hour look around.
+  const open = status === "signed-in" && surveyStatus === "pending" && !user?.demo;
   const canSubmit = survey.profession.trim() && survey.goal.trim() && survey.businessType;
 
   async function handleSubmit(e: React.FormEvent) {

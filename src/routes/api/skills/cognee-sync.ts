@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/server/require-admin";
+import { requireUser, requireRealUser } from "@/lib/server/require-admin";
 import { createFileRoute } from "@tanstack/react-router";
 import { cogneeConfigured } from "@/skills/services/cognee";
 import { syncBusinessMemory } from "@/skills/skill-business-analyst/sync";
@@ -10,7 +10,7 @@ export const Route = createFileRoute("/api/skills/cognee-sync")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const auth = await requireUser(request);
+        const auth = await requireRealUser(request);
         if (!auth.ok) return auth.response;
         if (!cogneeConfigured())
           return json({ error: "cognee isn't configured on this server." }, 503);

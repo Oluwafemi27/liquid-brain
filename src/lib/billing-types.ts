@@ -6,6 +6,9 @@ export interface PlanLimits {
   n8n: boolean;
   sandbox: boolean;
   digest: boolean;
+  /** AI actions ("hits") allowed per clock hour and per UTC day. 0 means no cap. */
+  hitsPerHour: number;
+  hitsPerDay: number;
 }
 
 export const DEFAULT_LIMITS: PlanLimits = {
@@ -14,6 +17,8 @@ export const DEFAULT_LIMITS: PlanLimits = {
   n8n: false,
   sandbox: false,
   digest: false,
+  hitsPerHour: 0,
+  hitsPerDay: 0,
 };
 
 export interface Plan {
@@ -118,7 +123,13 @@ export interface PromoCodeRow {
   createdAt: string;
 }
 
-export const PLAN_RANK: Record<string, number> = { free: 0, starter: 1, growth: 2, scale: 3 };
+export const PLAN_RANK: Record<string, number> = {
+  demo: 0,
+  free: 0,
+  starter: 1,
+  growth: 2,
+  scale: 3,
+};
 export const planRank = (id: string) => PLAN_RANK[id] ?? 1;
 
 export const formatNgn = (n: number) => `₦${Math.round(n).toLocaleString("en-NG")}`;
@@ -144,3 +155,41 @@ export const FEATURE_LABEL: Record<string, string> = {
   n8n: "Workflow builder",
   other: "Other",
 };
+
+// ---- usage, limits and notices (what the app measures and tells people) ----------------------
+
+/** One rolling cap (an hour or a day). `limit` 0 means this plan has no such cap. */
+export interface HitWindow {
+  used: number;
+  limit: number;
+  resetsAt: string;
+}
+
+export type NoticeLevel = "info" | "warning" | "blocked";
+
+export interface LimitNotice {
+  /** Stable, so a notice the person dismissed doesn't come back on the next refresh. */
+  id: string;
+  level: NoticeLevel;
+  title: string;
+  body: string;
+  resetsAt?: string;
+  cta?: "upgrade" | "topup" | "signin";
+}
+
+export interface UsageSnapshot {
+  planId: string;
+  planName: string;
+  /** Credits this term (the plan allowance; top-up credits are listed separately). */
+  credits: { used: number; limit: number; bonus: number; remaining: number };
+  /** The measuring period: a month for normal plans, the whole visit for a demo session. */
+  term: { start: string; end: string; daysLeft: number; kind: "month" | "demo" };
+  hour: HitWindow;
+  day: HitWindow;
+  /** AI actions and distinct chat sessions in this term. */
+  hitsThisTerm: number;
+  sessionsThisTerm: number;
+}
+
+/** Share of a cap at which people are warned before they hit it. */
+export const WARN_AT = 0.8;

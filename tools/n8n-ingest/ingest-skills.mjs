@@ -17,7 +17,13 @@ const SOURCES = [
     root: "n8n-skills/skills",
     // Only pull skills the official n8n-io/skills repo doesn't cover, to
     // avoid ~90% duplicate content between the two repos.
-    onlyDirs: ["n8n-self-hosting", "n8n-mcp-tools-expert", "n8n-validation-expert", "n8n-code-python", "n8n-code-tool"],
+    onlyDirs: [
+      "n8n-self-hosting",
+      "n8n-mcp-tools-expert",
+      "n8n-validation-expert",
+      "n8n-code-python",
+      "n8n-code-tool",
+    ],
   },
 ];
 

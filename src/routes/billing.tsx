@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { UsagePanel } from "@/components/aduf/usage-panel";
 import { AlertTriangle, CheckCircle2, Loader2, Tag, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/aduf/app-shell";
@@ -260,6 +261,7 @@ function BillingPage() {
               Monthly allowance resets on {fmtDate(ent.wallet.periodEnd)}. Allowance is used first,
               then extra credits.
             </p>
+            <UsagePanel />
             {ent.wallet.total <= 0 ? (
               <p className="rounded-xl bg-red-400/10 p-3 text-xs text-red-200">
                 You're out of credits, so ADUF can't answer until your allowance resets. Top up

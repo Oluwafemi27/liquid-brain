@@ -6,6 +6,8 @@ export interface AuthUser {
   email: string | null;
   name: string;
   avatarUrl: string | null;
+  /** True for "Continue as demo" visitors: a throwaway account that is deleted after the demo. */
+  demo?: boolean;
 }
 
 interface AuthState {
@@ -27,6 +29,12 @@ interface AuthState {
   openSignIn: () => void;
   closeSignIn: () => void;
   signInWithGoogle: () => Promise<void>;
+  /** "Continue as demo": the server makes a brand-new throwaway account for this visit; the browser signs
+   *  into it. Nothing is shared with any other visitor, and it is all deleted when the demo ends. */
+  signInAsDemo: () => Promise<{ ok: boolean; message?: string }>;
+  /** When the current demo ends (ISO), if this is a demo visit. */
+  demoExpiresAt: string | null;
+  setDemoExpiresAt: (iso: string | null) => void;
   /** Emails a one-time sign-in link (no password, no Google account needed). */
   signInWithEmail: (email: string) => Promise<{ ok: boolean; message: string }>;
   signOut: () => Promise<void>;
@@ -47,6 +55,7 @@ function toAuthUser(supabaseUser: {
   id: string;
   email?: string | null;
   user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
 }): AuthUser {
   const meta = supabaseUser.user_metadata ?? {};
   const name =
@@ -56,7 +65,8 @@ function toAuthUser(supabaseUser: {
     "";
   const avatarUrl =
     (meta["avatar_url"] as string | undefined) ?? (meta["picture"] as string | undefined) ?? null;
-  return { id: supabaseUser.id, email: supabaseUser.email ?? null, name, avatarUrl };
+  const demo = Boolean(supabaseUser.app_metadata?.["demo"]);
+  return { id: supabaseUser.id, email: supabaseUser.email ?? null, name, avatarUrl, demo };
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
@@ -66,6 +76,8 @@ export const useAuth = create<AuthState>((set, get) => ({
   surveyStatus: "unknown",
   signInModalOpen: false,
   initialized: false,
+  demoExpiresAt: null,
+  setDemoExpiresAt: (iso) => set({ demoExpiresAt: iso }),
 
   init: () => {
     if (get().initialized) return;
@@ -133,6 +145,32 @@ export const useAuth = create<AuthState>((set, get) => ({
     });
   },
 
+  signInAsDemo: async () => {
+    const client = getSupabaseBrowser();
+    if (!client) return { ok: false, message: "The demo isn't available right now." };
+    try {
+      const res = await fetch("/api/demo", { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as {
+        tokenHash?: string;
+        expiresAt?: string;
+        error?: string;
+      };
+      if (!res.ok || !body.tokenHash)
+        return { ok: false, message: body.error ?? "Couldn't start the demo. Try again." };
+      const { error } = await client.auth.verifyOtp({ token_hash: body.tokenHash, type: "email" });
+      if (error) return { ok: false, message: "Couldn't start the demo. Try again." };
+      try {
+        window.localStorage.removeItem("aduf-demo-ended");
+      } catch {
+        /* storage unavailable */
+      }
+      set({ demoExpiresAt: body.expiresAt ?? null, signInModalOpen: false });
+      return { ok: true };
+    } catch {
+      return { ok: false, message: "Couldn't reach ADUF. Check your connection and try again." };
+    }
+  },
+
   signInWithEmail: async (email) => {
     const client = getSupabaseBrowser();
     if (!client) return { ok: false, message: "Sign-in isn't available right now." };
@@ -158,7 +196,13 @@ export const useAuth = create<AuthState>((set, get) => ({
     const client = getSupabaseBrowser();
     if (!client) return;
     await client.auth.signOut();
-    set({ status: "signed-out", user: null, accessToken: null, surveyStatus: "unknown" });
+    set({
+      status: "signed-out",
+      user: null,
+      accessToken: null,
+      surveyStatus: "unknown",
+      demoExpiresAt: null,
+    });
     // The next person to sign in on this device must never see this account's chats, notifications or
     // goals still sitting in memory, so forget the chat id and reload the app from scratch.
     if (typeof window !== "undefined") {

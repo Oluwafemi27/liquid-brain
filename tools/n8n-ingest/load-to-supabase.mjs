@@ -63,9 +63,11 @@ async function main() {
     total++;
 
     if (batch.length >= BATCH_SIZE) {
-      const { error, count } = await supabase
-        .from("n8n_workflow_templates")
-        .upsert(batch, { onConflict: "source_repo,source_path", ignoreDuplicates: true, count: "exact" });
+      const { error, count } = await supabase.from("n8n_workflow_templates").upsert(batch, {
+        onConflict: "source_repo,source_path",
+        ignoreDuplicates: true,
+        count: "exact",
+      });
       if (error) {
         console.error(`Batch failed at row ${total}:`, error.message);
         failed += batch.length;
@@ -77,9 +79,11 @@ async function main() {
     }
   }
   if (batch.length) {
-    const { error, count } = await supabase
-      .from("n8n_workflow_templates")
-      .upsert(batch, { onConflict: "source_repo,source_path", ignoreDuplicates: true, count: "exact" });
+    const { error, count } = await supabase.from("n8n_workflow_templates").upsert(batch, {
+      onConflict: "source_repo,source_path",
+      ignoreDuplicates: true,
+      count: "exact",
+    });
     if (error) {
       console.error("Final batch failed:", error.message);
       failed += batch.length;

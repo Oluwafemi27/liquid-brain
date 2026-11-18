@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useUsage } from "@/store/usage-store";
 import type {
   AnalyticsSummary,
   Automation,
@@ -555,9 +556,13 @@ export const useAduf = create<AdufState>((set, get) => ({
           proposedAction?: ChatMessage["proposedAction"] | null;
           sources?: ChatMessage["sources"];
           dataGaps?: ChatMessage["dataGaps"];
+          limit?: { scope: string; limit: number; resetsAt: string | null };
         };
       })
       .then((data) => {
+        // Every reply moves the person's usage (credits, replies this hour/day): refresh the meter and
+        // warnings now rather than on the next timer tick. A limit hit shows its banner immediately.
+        void useUsage.getState().refresh();
         set((s) => ({
           messages: [
             ...s.messages,

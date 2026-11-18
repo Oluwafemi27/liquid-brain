@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { json, requireUser } from "@/lib/server/require-admin";
+import { json, requireUser, requireRealUser } from "@/lib/server/require-admin";
 import { signedViewUrl } from "@/lib/server/attachments";
 import { LIMITS, withRateLimit } from "@/lib/server/rate-limit";
 
@@ -9,7 +9,7 @@ export const Route = createFileRoute("/api/attachments/url")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const auth = await requireUser(request);
+        const auth = await requireRealUser(request);
         if (!auth.ok) return auth.response;
         return withRateLimit(`read:${auth.userId}`, LIMITS.read, async () => {
           const parsed = z
