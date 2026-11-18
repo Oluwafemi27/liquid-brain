@@ -1,0 +1,18 @@
+# Backup scheduler: asks the app to delete expired uploads every hour.
+# Needs two repository secrets: APP_URL (e.g. https://your-app.azurecontainerapps.io) and CRON_SECRET.
+name: Purge expired uploads
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the purge endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$APP_URL" -a -n "$CRON_SECRET" || { echo "Set the APP_URL and CRON_SECRET repository secrets"; exit 1; }
+          curl --fail --show-error --silent --max-time 60 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/purge-files"

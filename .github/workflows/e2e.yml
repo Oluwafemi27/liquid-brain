@@ -1,0 +1,16 @@
+# Runs the browser smoke tests on every pull request (local Chromium, free). BrowserStack runs are
+# manual or on main: see docs/TESTING.md.
+name: Browser tests
+on:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

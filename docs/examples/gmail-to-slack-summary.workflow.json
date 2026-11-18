@@ -1,0 +1,108 @@
+{
+  "name": "New email → summary → Slack",
+  "nodes": [
+    {
+      "id": "trigger-10c9137cbc32e9b6",
+      "name": "ADUF Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "aduf-gmail-to-slack",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aduf-gmail-to-slack",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "notes": "aduf-composio-trigger:{\"toolkit\":\"gmail\",\"slug\":\"GMAIL_NEW_GMAIL_MESSAGE\",\"config\":{},\"path\":\"aduf-gmail-to-slack\"}"
+    },
+    {
+      "id": "action-1-b6e78034f8cb27e4",
+      "name": "Summarise email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-ADUF-URL/api/n8n-relay",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer <SIGNED_RELAY_TOKEN>"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"tool\": \"ADUF_AI_TEXT\", \"arguments\": { \"instruction\": \"Summarise this email in two short sentences and say whether it needs a reply.\", \"text\": 'From: ' + $json.body.sender + '\\nSubject: ' + $json.body.subject + '\\n\\n' + $json.body.message_text } } }}",
+        "options": {
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "action-2-84517d9411713adb",
+      "name": "Send to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-ADUF-URL/api/n8n-relay",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer <SIGNED_RELAY_TOKEN>"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"tool\": \"SLACK_SENDS_A_MESSAGE_TO_A_SLACK_CHANNEL\", \"connectedAccountId\": \"ca_SLACK_ID\", \"toolkit\": \"slack\", \"arguments\": { \"channel\": \"general\", \"text\": `New email from ${$('ADUF Trigger').item.json.body.sender}: ${$json.data.text}` } } }}",
+        "options": {
+          "timeout": 60000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "ADUF Trigger": {
+      "main": [
+        [
+          {
+            "node": "Summarise email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarise email": {
+      "main": [
+        [
+          {
+            "node": "Send to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
