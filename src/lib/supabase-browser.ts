@@ -24,13 +24,28 @@ export function getSupabaseBrowser(): SupabaseClient | null {
   }
 
   if (!cached) {
-    cached = createClient(url, anonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-      },
-    });
+    // A mistyped address (no https://, stray spaces or quotes) must switch sign-in off, not crash the
+    // whole page on load.
+    const clean = url.trim().replace(/^["']|["']$/g, "");
+    try {
+      cached = createClient(
+        /^https?:\/\//i.test(clean) ? clean : `https://${clean}`,
+        anonKey.trim(),
+        {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true,
+          },
+        },
+      );
+    } catch (error) {
+      console.error(
+        "[auth] VITE_SUPABASE_URL is not a valid address — sign-in is disabled.",
+        error,
+      );
+      return null;
+    }
   }
   return cached;
 }

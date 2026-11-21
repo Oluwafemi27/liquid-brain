@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { appBaseUrl } from "@/lib/server/app-url";
 import { z } from "zod";
-import { json, requireAdmin } from "@/lib/server/require-admin";
+import { json, requireRealUser } from "@/lib/server/require-admin";
 import {
   clearBusinessData,
   enableBusinessUpdates,
@@ -13,6 +13,7 @@ import {
   disconnectTelegram,
   getTelegramStatus,
   resetPairing,
+  telegramWorkspaceFor,
 } from "@/lib/server/telegram";
 
 const postSchema = z.union([
@@ -31,20 +32,22 @@ const postSchema = z.union([
   }),
 ]);
 
-/** Settings > Connections > Telegram. GET = status (incl. pairing code),
+/** Settings > Connections > Telegram. Every signed-in (non-demo) account has its own bot. GET = status (incl. pairing code),
  *  POST = verify + connect a bot token, or reset pairing; DELETE = disconnect.
  *  The bot token is never echoed back. */
 export const Route = createFileRoute("/api/connectors/telegram")({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        const admin = await requireAdmin(request, "manage Telegram");
-        if (!admin.ok) return admin.response;
-        return json({ ...(await getTelegramStatus()), business: await getBusinessState() });
+        const auth = await requireRealUser(request);
+        if (!auth.ok) return auth.response;
+        const ws = await telegramWorkspaceFor(auth.userId);
+        return json({ ...(await getTelegramStatus(ws)), business: await getBusinessState(ws) });
       },
       POST: async ({ request }) => {
-        const admin = await requireAdmin(request, "manage Telegram");
-        if (!admin.ok) return admin.response;
+        const auth = await requireRealUser(request);
+        if (!auth.ok) return auth.response;
+        const ws = await telegramWorkspaceFor(auth.userId);
         let raw: unknown;
         try {
           raw = await request.json();
@@ -62,30 +65,31 @@ export const Route = createFileRoute("/api/connectors/telegram")({
           const body = parsed.data;
           try {
             if (body.action === "reset_pairing") {
-              await resetPairing();
+              await resetPairing(ws);
               return json({ ok: true });
             }
             if (body.action === "enable_business") {
-              const result = await enableBusinessUpdates(origin);
+              const result = await enableBusinessUpdates(ws, origin);
               return result.ok ? json({ ok: true }) : json({ error: result.error }, 400);
             }
-            await saveBusinessSettings(body.settings);
+            await saveBusinessSettings(ws, body.settings);
             return json({ ok: true });
           } catch (error) {
             return fail(error, "Request failed");
           }
         }
 
-        const result = await connectTelegram(parsed.data.botToken, origin, admin.userId);
+        const result = await connectTelegram(ws, parsed.data.botToken, origin, auth.userId);
         if (!result.ok) return json({ error: result.error }, 400);
         return json({ ok: true, botUsername: result.botUsername });
       },
       DELETE: async ({ request }) => {
-        const admin = await requireAdmin(request, "manage Telegram");
-        if (!admin.ok) return admin.response;
+        const auth = await requireRealUser(request);
+        if (!auth.ok) return auth.response;
+        const ws = await telegramWorkspaceFor(auth.userId);
         try {
-          await disconnectTelegram();
-          await clearBusinessData();
+          await disconnectTelegram(ws);
+          await clearBusinessData(ws);
           return json({ ok: true });
         } catch (error) {
           return json(

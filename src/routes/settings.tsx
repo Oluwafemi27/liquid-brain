@@ -236,14 +236,15 @@ function SettingsPage() {
                     </span>
                   </GlassCard>
                 </Link>
+                {/* Everyone with a real account connects their own: their model key, their n8n, their
+                    Telegram bot. Nothing here is shared with other accounts. */}
+                <ModelKeysPanel />
                 <N8nConnectionPanel />
-                {isAdmin ? (
-                  <div id="telegram-panel">
-                    <TelegramConnectionPanel
-                      onChange={(connected) => setSourceConnected("telegram", connected)}
-                    />
-                  </div>
-                ) : null}
+                <div id="telegram-panel">
+                  <TelegramConnectionPanel
+                    onChange={(connected) => setSourceConnected("telegram", connected)}
+                  />
+                </div>
               </div>
             ) : null}
 
@@ -266,7 +267,6 @@ function SettingsPage() {
                     </div>
                   </GlassCard>
                 </Link>
-                <ModelKeysPanel />
                 <SkillsPanel />
               </div>
             ) : null}

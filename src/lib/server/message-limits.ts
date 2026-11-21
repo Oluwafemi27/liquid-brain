@@ -1,11 +1,11 @@
 import "@tanstack/react-start/server-only";
 import { logEvent } from "./activity";
 import { getOwnerSettings } from "./owner-settings";
-import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin } from "./supabase";
 
 /** True when ADUF has already sent the owner's daily cap of customer messages (rolling 24h).
  *  Records a single warning per hour so the log shows why auto-replies went quiet. */
-export async function dailyMessageCapReached(ownerUserId: string): Promise<boolean> {
+export async function dailyMessageCapReached(ownerUserId: string, ws: string): Promise<boolean> {
   const db = getSupabaseAdmin();
   if (!db) return false;
   const { dailyMessageCap } = await getOwnerSettings(ownerUserId);
@@ -13,7 +13,7 @@ export async function dailyMessageCapReached(ownerUserId: string): Promise<boole
   const { count } = await db
     .from("telegram_messages")
     .select("id", { count: "exact", head: true })
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .eq("direction", "out")
     .gte("received_at", since);
   if ((count ?? 0) < dailyMessageCap) return false;
@@ -49,13 +49,13 @@ export async function logAutoReply(ownerUserId: string, handoff: boolean): Promi
 }
 
 /** The ADUF account that owns the Telegram bot (telegram_business_connections.user_id is a *Telegram* id). */
-export async function getTelegramOwnerId(): Promise<string | null> {
+export async function getTelegramOwnerId(ws: string): Promise<string | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
   const { data } = await db
     .from("telegram_connections")
     .select("owner_user_id")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .maybeSingle();
   return (data?.["owner_user_id"] as string | null) ?? null;
 }

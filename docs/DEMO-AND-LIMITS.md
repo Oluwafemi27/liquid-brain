@@ -21,3 +21,15 @@ Usage panel (Settings → Plan) shows credits, replies this hour/today, term and
 - Keep the key owner's default Gemini key valid.
 - Supabase Auth email provider must stay enabled (the demo uses `generateLink`).
 - Optional: add Cloudflare Turnstile in front of `/api/demo` if bots appear.
+
+## Your own model key, n8n and Telegram (every real account)
+Anyone signed in with a real account (not a demo) can add their **own** model key, connect their **own** n8n and
+their **own** Telegram bot in Settings → Connections. Each account has its own bot, pairing code, chats and
+customer-reply settings; the webhook address carries the account id (`/api/connectors/telegram/webhook?w=<id>`) and
+is checked with that account's own secret. One bot token can only belong to one account. The bot connected before
+this change stays with the person who connected it.
+
+## If a page won't load
+Open `/api/health`. If it answers, the server is up: `build` shows which deploy is live and `config` says, yes/no,
+whether `SUPABASE_URL`, `TOKEN_ENCRYPTION_KEY`, `APP_URL` etc. are set and well formed. A badly typed address no longer
+crashes pages (security headers and the browser sign-in fall back safely).

@@ -51,12 +51,12 @@ function formatReply(reply: Awaited<ReturnType<typeof callAgent>>): string {
 /** Handles one Telegram update end to end: dedupe → pairing gate → agent →
  *  reply. Never throws (the webhook must always answer 200, or Telegram
  *  keeps retrying); failures are logged and the user gets a short apology. */
-export async function handleTelegramUpdate(update: TgUpdate): Promise<void> {
+export async function handleTelegramUpdate(ws: string, update: TgUpdate): Promise<void> {
   // Customer DMs to the owner's own account (Telegram Business) are a different
   // trust model from the owner chatting with the bot — handled separately, with
   // a customer-safe assistant that never touches the owner's business data.
   if (update.business_connection || update.business_message) {
-    await handleBusinessUpdate(update);
+    await handleBusinessUpdate(ws, update);
     return;
   }
 
@@ -65,7 +65,7 @@ export async function handleTelegramUpdate(update: TgUpdate): Promise<void> {
   // room reach the agent.
   if (!msg || msg.chat.type !== "private") return;
 
-  const isNew = await recordInboundUpdate(update);
+  const isNew = await recordInboundUpdate(ws, update);
   if (!isNew) return; // Telegram retry — already handled
 
   const chatId = msg.chat.id;
@@ -77,8 +77,9 @@ export async function handleTelegramUpdate(update: TgUpdate): Promise<void> {
     if (text.startsWith("/start")) {
       const code = text.slice("/start".length).trim();
       if (code) {
-        const ok = await tryPairChat(chatId, displayName, code);
+        const ok = await tryPairChat(ws, chatId, displayName, code);
         await sendTelegramMessage(
+          ws,
           chatId,
           ok
             ? "You're connected. I'm ADUF, your business COO — ask me anything about your business."
@@ -87,40 +88,42 @@ export async function handleTelegramUpdate(update: TgUpdate): Promise<void> {
         );
         return;
       }
-      await sendTelegramMessage(chatId, (await isChatPaired(chatId)) ? HELP : NOT_PAIRED, {
+      await sendTelegramMessage(ws, chatId, (await isChatPaired(ws, chatId)) ? HELP : NOT_PAIRED, {
         log: false,
       });
       return;
     }
 
-    if (!(await isChatPaired(chatId))) {
-      await sendTelegramMessage(chatId, NOT_PAIRED, { log: false });
+    if (!(await isChatPaired(ws, chatId))) {
+      await sendTelegramMessage(ws, chatId, NOT_PAIRED, { log: false });
       return;
     }
 
     if (text === "/help") {
-      await sendTelegramMessage(chatId, HELP, { log: false });
+      await sendTelegramMessage(ws, chatId, HELP, { log: false });
       return;
     }
     if (!text) {
-      await sendTelegramMessage(chatId, "I can only read text messages for now.", { log: false });
+      await sendTelegramMessage(ws, chatId, "I can only read text messages for now.", {
+        log: false,
+      });
       return;
     }
 
-    const ownerId = await getOwnerUserId();
+    const ownerId = await getOwnerUserId(ws);
     if (!(await resolveDefaultModelKey(ownerId))) {
-      await sendTelegramMessage(chatId, new NoModelConfiguredError().message, { log: false });
+      await sendTelegramMessage(ws, chatId, new NoModelConfiguredError().message, { log: false });
       return;
     }
 
-    void sendTypingAction(chatId);
+    void sendTypingAction(ws, chatId);
 
     const surveyBase = ownerId
       ? await getSurvey(ownerId).then((s) => (s ? surveyToContext(s) : undefined))
       : undefined;
     const appsContext = ownerId ? await connectedAppsContext(ownerId) : undefined;
     const surveyContext = [surveyBase, appsContext].filter(Boolean).join("\n\n") || undefined;
-    const turns = await fetchChatTurns(chatId, update.update_id);
+    const turns = await fetchChatTurns(ws, chatId, update.update_id);
     const history: ChatMessage[] = turns.map((t, i) => ({
       id: `tg-${i}`,
       role: t.role,
@@ -133,10 +136,11 @@ export async function handleTelegramUpdate(update: TgUpdate): Promise<void> {
         callAgent(ownerId, history, text.slice(0, 4000), repairContext, surveyContext),
       { maxAttempts: 2 },
     );
-    await sendTelegramMessage(chatId, formatReply(result));
+    await sendTelegramMessage(ws, chatId, formatReply(result));
   } catch (error) {
     console.error("[telegram] failed to answer message", error);
     await sendTelegramMessage(
+      ws,
       chatId,
       "Sorry — I couldn't put together an answer just now. Please try again in a moment.",
       { log: false },

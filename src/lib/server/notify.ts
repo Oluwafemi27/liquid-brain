@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { getSupabaseAdmin } from "./supabase";
-import { sendTelegramMessage } from "./telegram";
+import { sendTelegramMessage, telegramWorkspaceFor } from "./telegram";
 
 export interface DeliveryResult {
   ok: boolean;
@@ -47,18 +47,19 @@ export async function sendEmailToOwner(
 export async function sendTelegramToOwner(userId: string, text: string): Promise<DeliveryResult> {
   const db = getSupabaseAdmin();
   try {
-    // The bot belongs to one owner; only that person's summaries go to Telegram.
+    // Each account has its own bot; a person's summaries only ever go through their own.
+    const ws = await telegramWorkspaceFor(userId);
     const { data: conn } = await db!
       .from("telegram_connections")
       .select("owner_user_id")
-      .eq("workspace_id", "default")
+      .eq("workspace_id", ws)
       .maybeSingle();
     if (!conn || conn["owner_user_id"] !== userId)
       return { ok: false, message: "Telegram isn't linked to your account." };
     const { data: biz } = await db!
       .from("telegram_business_connections")
       .select("user_chat_id")
-      .eq("workspace_id", "default")
+      .eq("workspace_id", ws)
       .eq("is_enabled", true)
       .limit(1)
       .maybeSingle();
@@ -67,13 +68,13 @@ export async function sendTelegramToOwner(userId: string, text: string): Promise
       const { data: paired } = await db!
         .from("telegram_paired_chats")
         .select("chat_id")
-        .eq("workspace_id", "default")
+        .eq("workspace_id", ws)
         .limit(1)
         .maybeSingle();
       chat = paired?.["chat_id"] as number | undefined;
     }
     if (!chat) return { ok: false, message: "Pair a Telegram chat with the bot first." };
-    await sendTelegramMessage(chat, text, { log: false });
+    await sendTelegramMessage(ws, chat, text, { log: false });
     return { ok: true, message: "Sent on Telegram." };
   } catch {
     return { ok: false, message: "Telegram isn't set up on this server." };

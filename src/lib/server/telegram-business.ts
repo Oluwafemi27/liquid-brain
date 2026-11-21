@@ -10,10 +10,11 @@ import { randomBytes } from "node:crypto";
 import { runWithHarness } from "./agent-harness";
 import { resolveDefaultModelKey } from "./model-keys";
 import { MODEL_PROVIDERS, callProviderChat, type ChatTurn } from "./model-providers";
-import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin } from "./supabase";
 import {
   resolveTelegramToken,
   sha256,
+  telegramWebhookUrl,
   tgCall,
   type TgBusinessConnection,
   type TgMessage,
@@ -64,13 +65,13 @@ const HANDOFF_TOKEN = "[[HANDOFF]]";
 
 // --- Settings & state ----------------------------------------------------------
 
-export async function getBusinessSettings(): Promise<BusinessSettings> {
+export async function getBusinessSettings(ws: string): Promise<BusinessSettings> {
   const db = getSupabaseAdmin();
   if (!db) return DEFAULT_SETTINGS;
   const { data } = await db
     .from("telegram_business_settings")
     .select("auto_reply_enabled, disclose_ai, pause_hours, max_replies_per_hour, business_info")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .maybeSingle();
   if (!data) return DEFAULT_SETTINGS;
   return {
@@ -83,18 +84,21 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
   };
 }
 
-export async function saveBusinessSettings(patch: {
-  [K in keyof BusinessSettings]?: BusinessSettings[K] | undefined;
-}): Promise<void> {
+export async function saveBusinessSettings(
+  ws: string,
+  patch: {
+    [K in keyof BusinessSettings]?: BusinessSettings[K] | undefined;
+  },
+): Promise<void> {
   const db = getSupabaseAdmin();
   if (!db) throw new Error("No backend configured.");
-  const current = await getBusinessSettings();
+  const current = await getBusinessSettings(ws);
   // Only fields the caller actually sent overwrite the stored value.
   const defined = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
   const next: BusinessSettings = { ...current, ...defined };
   const { error } = await db.from("telegram_business_settings").upsert(
     {
-      workspace_id: DEFAULT_WORKSPACE_ID,
+      workspace_id: ws,
       auto_reply_enabled: next.autoReplyEnabled,
       disclose_ai: next.discloseAi,
       pause_hours: next.pauseHours,
@@ -107,22 +111,22 @@ export async function saveBusinessSettings(patch: {
   if (error) throw new Error(`Failed to save settings: ${error.message}`);
 }
 
-export async function getBusinessState(): Promise<BusinessState> {
+export async function getBusinessState(ws: string): Promise<BusinessState> {
   const db = getSupabaseAdmin();
-  const settings = await getBusinessSettings();
+  const settings = await getBusinessSettings(ws);
   if (!db) return { connections: [], settings, last24h: { received: 0, answered: 0 } };
 
   const { data: conns } = await db
     .from("telegram_business_connections")
     .select("connection_id, user_name, is_enabled, can_reply")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID);
+    .eq("workspace_id", ws);
 
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
   const count = async (direction: "in" | "out") => {
     const { count: n } = await db
       .from("telegram_messages")
       .select("id", { count: "exact", head: true })
-      .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+      .eq("workspace_id", ws)
       .eq("direction", direction)
       .not("business_connection_id", "is", null)
       .gte("received_at", since);
@@ -145,9 +149,10 @@ export async function getBusinessState(): Promise<BusinessState> {
  *  the webhook secret is only stored as a hash — so re-registering means
  *  issuing a fresh secret. Also verifies the bot has Business Mode on. */
 export async function enableBusinessUpdates(
+  ws: string,
   origin: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const token = await resolveTelegramToken();
+  const token = await resolveTelegramToken(ws);
   const db = getSupabaseAdmin();
   if (!token || !db) return { ok: false, error: "Connect your Telegram bot first." };
   if (!origin.startsWith("https://")) {
@@ -164,14 +169,14 @@ export async function enableBusinessUpdates(
     }
     const secret = randomBytes(32).toString("hex");
     await tgCall(token, "setWebhook", {
-      url: `${origin}/api/connectors/telegram/webhook`,
+      url: telegramWebhookUrl(origin, ws),
       secret_token: secret,
       allowed_updates: ["message", "channel_post", "business_connection", "business_message"],
     });
     const { error } = await db
       .from("telegram_connections")
       .update({ webhook_secret_hash: sha256(secret), updated_at: new Date().toISOString() })
-      .eq("workspace_id", DEFAULT_WORKSPACE_ID);
+      .eq("workspace_id", ws);
     if (error)
       return { ok: false, error: `Couldn't save the new webhook secret: ${error.message}` };
     return { ok: true };
@@ -181,11 +186,11 @@ export async function enableBusinessUpdates(
 }
 
 /** Called when the bot is disconnected: business connections are tied to the bot. */
-export async function clearBusinessData(): Promise<void> {
+export async function clearBusinessData(ws: string): Promise<void> {
   const db = getSupabaseAdmin();
   if (!db) return;
-  await db.from("telegram_business_connections").delete().eq("workspace_id", DEFAULT_WORKSPACE_ID);
-  await db.from("telegram_business_pauses").delete().eq("workspace_id", DEFAULT_WORKSPACE_ID);
+  await db.from("telegram_business_connections").delete().eq("workspace_id", ws);
+  await db.from("telegram_business_pauses").delete().eq("workspace_id", ws);
 }
 
 // --- Sending ---------------------------------------------------------------------
@@ -214,6 +219,7 @@ async function alertOwner(token: string, chatId: number, text: string) {
 // --- Persistence helpers --------------------------------------------------------
 
 async function recordMessage(
+  ws: string,
   update: TgUpdate,
   msg: TgMessage,
   direction: "in" | "owner",
@@ -224,7 +230,7 @@ async function recordMessage(
     .from("telegram_messages")
     .upsert(
       {
-        workspace_id: DEFAULT_WORKSPACE_ID,
+        workspace_id: ws,
         update_id: update.update_id,
         direction,
         chat_id: msg.chat.id,
@@ -246,6 +252,7 @@ async function recordMessage(
 }
 
 async function logOutbound(
+  ws: string,
   connectionId: string,
   chatId: number,
   text: string,
@@ -254,7 +261,7 @@ async function logOutbound(
   const db = getSupabaseAdmin();
   if (!db) return;
   const { error } = await db.from("telegram_messages").insert({
-    workspace_id: DEFAULT_WORKSPACE_ID,
+    workspace_id: ws,
     direction: "out",
     chat_id: chatId,
     chat_type: "private",
@@ -265,12 +272,12 @@ async function logOutbound(
   if (error) console.error("[telegram-business] failed to log outbound", error);
 }
 
-async function pauseChat(chatId: number, hours: number, reason: string) {
+async function pauseChat(ws: string, chatId: number, hours: number, reason: string) {
   const db = getSupabaseAdmin();
   if (!db) return;
   await db.from("telegram_business_pauses").upsert(
     {
-      workspace_id: DEFAULT_WORKSPACE_ID,
+      workspace_id: ws,
       chat_id: chatId,
       paused_until: new Date(Date.now() + hours * 3600 * 1000).toISOString(),
       reason,
@@ -279,26 +286,30 @@ async function pauseChat(chatId: number, hours: number, reason: string) {
   );
 }
 
-async function isPaused(chatId: number): Promise<boolean> {
+async function isPaused(ws: string, chatId: number): Promise<boolean> {
   const db = getSupabaseAdmin();
   if (!db) return false;
   const { data } = await db
     .from("telegram_business_pauses")
     .select("paused_until")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .eq("chat_id", chatId)
     .maybeSingle();
   return Boolean(data && new Date(data["paused_until"] as string).getTime() > Date.now());
 }
 
 /** True if this message id is one of OUR replies echoed back — not the owner typing. */
-async function isOurOwnMessage(chatId: number, tgMessageId: number | undefined): Promise<boolean> {
+async function isOurOwnMessage(
+  ws: string,
+  chatId: number,
+  tgMessageId: number | undefined,
+): Promise<boolean> {
   const db = getSupabaseAdmin();
   if (!db || tgMessageId === undefined) return false;
   const { data } = await db
     .from("telegram_messages")
     .select("id")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .eq("chat_id", chatId)
     .eq("direction", "out")
     .eq("tg_message_id", tgMessageId)
@@ -306,13 +317,13 @@ async function isOurOwnMessage(chatId: number, tgMessageId: number | undefined):
   return (data?.length ?? 0) > 0;
 }
 
-async function repliesInLastHour(chatId: number): Promise<number> {
+async function repliesInLastHour(ws: string, chatId: number): Promise<number> {
   const db = getSupabaseAdmin();
   if (!db) return 0;
   const { count } = await db
     .from("telegram_messages")
     .select("id", { count: "exact", head: true })
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .eq("chat_id", chatId)
     .eq("direction", "out")
     .not("business_connection_id", "is", null)
@@ -320,13 +331,13 @@ async function repliesInLastHour(chatId: number): Promise<number> {
   return count ?? 0;
 }
 
-async function chatTurns(chatId: number, excludeUpdateId: number): Promise<ChatTurn[]> {
+async function chatTurns(ws: string, chatId: number, excludeUpdateId: number): Promise<ChatTurn[]> {
   const db = getSupabaseAdmin();
   if (!db) return [];
   const { data } = await db
     .from("telegram_messages")
     .select("direction, text, update_id")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .eq("chat_id", chatId)
     .not("business_connection_id", "is", null)
     .order("received_at", { ascending: false })
@@ -399,20 +410,20 @@ async function generateCustomerReply(
 
 // --- Update handlers -----------------------------------------------------------
 
-async function onConnection(conn: TgBusinessConnection) {
+async function onConnection(ws: string, conn: TgBusinessConnection) {
   const db = getSupabaseAdmin();
   if (!db) return;
   const { data: existing } = await db
     .from("telegram_business_connections")
     .select("is_enabled")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .eq("connection_id", conn.id)
     .maybeSingle();
 
   const canReply = conn.rights?.can_reply ?? conn.can_reply ?? false;
   const { error } = await db.from("telegram_business_connections").upsert(
     {
-      workspace_id: DEFAULT_WORKSPACE_ID,
+      workspace_id: ws,
       connection_id: conn.id,
       user_id: conn.user.id,
       user_chat_id: conn.user_chat_id,
@@ -430,7 +441,7 @@ async function onConnection(conn: TgBusinessConnection) {
 
   const newlyEnabled = conn.is_enabled && !(existing && existing["is_enabled"]);
   if (newlyEnabled) {
-    const token = await resolveTelegramToken();
+    const token = await resolveTelegramToken(ws);
     if (token) {
       await alertOwner(
         token,
@@ -444,7 +455,7 @@ async function onConnection(conn: TgBusinessConnection) {
   }
 }
 
-async function onBusinessMessage(update: TgUpdate, msg: TgMessage) {
+async function onBusinessMessage(ws: string, update: TgUpdate, msg: TgMessage) {
   const db = getSupabaseAdmin();
   const connectionId = msg.business_connection_id;
   if (!db || !connectionId) return;
@@ -452,38 +463,38 @@ async function onBusinessMessage(update: TgUpdate, msg: TgMessage) {
   const { data: conn } = await db
     .from("telegram_business_connections")
     .select("user_id, user_chat_id, user_name, is_enabled, can_reply")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .eq("connection_id", connectionId)
     .maybeSingle();
   if (!conn || !conn["is_enabled"]) return;
   if (msg.chat.type && msg.chat.type !== "private") return;
 
   const chatId = msg.chat.id;
-  const settings = await getBusinessSettings();
+  const settings = await getBusinessSettings(ws);
 
   // 1) The owner typing in the chat themselves → human takeover.
   if (msg.from?.id === conn["user_id"]) {
-    if (await isOurOwnMessage(chatId, msg.message_id)) return; // our echo, not the owner
-    if (await recordMessage(update, msg, "owner")) {
-      await pauseChat(chatId, settings.pauseHours, "owner replied");
+    if (await isOurOwnMessage(ws, chatId, msg.message_id)) return; // our echo, not the owner
+    if (await recordMessage(ws, update, msg, "owner")) {
+      await pauseChat(ws, chatId, settings.pauseHours, "owner replied");
     }
     return;
   }
 
   // 2) A customer message.
   if (msg.from?.is_bot || msg.from?.id === 777000) return; // bots + Telegram service notices
-  if (!(await recordMessage(update, msg, "in"))) return; // webhook retry — already handled
+  if (!(await recordMessage(ws, update, msg, "in"))) return; // webhook retry — already handled
 
   const text = (msg.text ?? "").trim();
   if (!text) return; // photos/voice/etc.: stored, left for the owner
   if (!settings.autoReplyEnabled || !conn["can_reply"]) return;
-  if (await isPaused(chatId)) return;
-  if ((await repliesInLastHour(chatId)) >= settings.maxRepliesPerHour) return;
-  const ownerId = await getTelegramOwnerId();
+  if (await isPaused(ws, chatId)) return;
+  if ((await repliesInLastHour(ws, chatId)) >= settings.maxRepliesPerHour) return;
+  const ownerId = await getTelegramOwnerId(ws);
   // Owner-set daily cap on customer messages: stop sending (and say why in the log) once it's hit.
-  if (ownerId && (await dailyMessageCapReached(ownerId))) return;
+  if (ownerId && (await dailyMessageCapReached(ownerId, ws))) return;
 
-  const token = await resolveTelegramToken();
+  const token = await resolveTelegramToken(ws);
   if (!token) return;
   const ownerName = (conn["user_name"] as string | null) ?? "the owner";
   const customerName = msg.from?.first_name ?? msg.from?.username ?? "A customer";
@@ -496,7 +507,7 @@ async function onBusinessMessage(update: TgUpdate, msg: TgMessage) {
 
   let reply: { text: string; handoff: boolean };
   try {
-    const history = await chatTurns(chatId, update.update_id);
+    const history = await chatTurns(ws, chatId, update.update_id);
     const draft = () =>
       generateCustomerReply(
         ownerId,
@@ -534,7 +545,7 @@ async function onBusinessMessage(update: TgUpdate, msg: TgMessage) {
     const { count } = await db
       .from("telegram_messages")
       .select("id", { count: "exact", head: true })
-      .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+      .eq("workspace_id", ws)
       .eq("chat_id", chatId)
       .eq("direction", "out");
     if (!count) out = `Hi, this is ${ownerName}'s automated assistant. ${out}`;
@@ -542,7 +553,7 @@ async function onBusinessMessage(update: TgUpdate, msg: TgMessage) {
 
   try {
     const tgId = await sendAsOwner(token, connectionId, chatId, out);
-    await logOutbound(connectionId, chatId, out, tgId);
+    await logOutbound(ws, connectionId, chatId, out, tgId);
     if (ownerId) await logAutoReply(ownerId, reply.handoff);
   } catch (error) {
     console.error("[telegram-business] send failed", error);
@@ -550,7 +561,7 @@ async function onBusinessMessage(update: TgUpdate, msg: TgMessage) {
   }
 
   if (reply.handoff) {
-    await pauseChat(chatId, settings.pauseHours, "handoff");
+    await pauseChat(ws, chatId, settings.pauseHours, "handoff");
     await alertOwner(
       token,
       conn["user_chat_id"] as number,
@@ -561,13 +572,13 @@ async function onBusinessMessage(update: TgUpdate, msg: TgMessage) {
 
 /** Entry point from the webhook dispatcher. Never throws — the webhook must
  *  always answer 200 or Telegram retries the update. */
-export async function handleBusinessUpdate(update: TgUpdate): Promise<void> {
+export async function handleBusinessUpdate(ws: string, update: TgUpdate): Promise<void> {
   try {
     if (update.business_connection) {
-      await onConnection(update.business_connection);
+      await onConnection(ws, update.business_connection);
       return;
     }
-    if (update.business_message) await onBusinessMessage(update, update.business_message);
+    if (update.business_message) await onBusinessMessage(ws, update, update.business_message);
   } catch (error) {
     console.error("[telegram-business] failed to handle update", error);
   }

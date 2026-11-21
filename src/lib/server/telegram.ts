@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "./supabase";
+import { DEFAULT_WORKSPACE_ID, getSupabaseAdmin } from "@/lib/server/supabase";
 
 const TG_API = "https://api.telegram.org";
 /** Bot tokens look like 123456789:AAH... (numeric id, colon, 35ish url-safe chars). */
@@ -57,22 +57,48 @@ function newPairingCode(): string {
   return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
 }
 
+/** Webhook address for one workspace. The first (shared) bot used the bare URL, which still means
+ *  "default"; every other workspace carries its own id so the server knows whose bot is calling. */
+export function telegramWebhookUrl(origin: string, ws: string): string {
+  const base = `${origin}/api/connectors/telegram/webhook`;
+  return ws === DEFAULT_WORKSPACE_ID ? base : `${base}?w=${encodeURIComponent(ws)}`;
+}
+
+/** Workspace ids are a user id (uuid) or the legacy "default". Anything else is rejected before use. */
+export const isValidWorkspaceId = (v: string) =>
+  v === DEFAULT_WORKSPACE_ID ||
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+/** Which Telegram workspace belongs to this person. Normally their own user id, so every account has
+ *  its own bot, pairing code, chats and customer-reply settings. The bot that was connected before
+ *  accounts had their own stays with the person who connected it. */
+export async function telegramWorkspaceFor(userId: string): Promise<string> {
+  const db = getSupabaseAdmin();
+  if (!db) return userId;
+  const { data } = await db
+    .from("telegram_connections")
+    .select("owner_user_id")
+    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .maybeSingle();
+  return data?.["owner_user_id"] === userId ? DEFAULT_WORKSPACE_ID : userId;
+}
+
 export const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 /** Connection status only — never the bot token. Safe to send to the client. */
-export async function getTelegramStatus(): Promise<TelegramStatus> {
+export async function getTelegramStatus(ws: string): Promise<TelegramStatus> {
   const db = getSupabaseAdmin();
   if (!db) return EMPTY_STATUS;
   const { data } = await db
     .from("telegram_connections")
     .select("bot_username, bot_name, connected, last_error, pairing_code")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .maybeSingle();
   if (!data) return EMPTY_STATUS;
   const { data: chats } = await db
     .from("telegram_paired_chats")
     .select("chat_id, display_name")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .order("paired_at", { ascending: true });
   return {
     connected: Boolean(data["connected"]),
@@ -87,7 +113,7 @@ export async function getTelegramStatus(): Promise<TelegramStatus> {
   };
 }
 
-async function setConnectorRow(connected: boolean, botUsername?: string | null) {
+async function setConnectorRow(ws: string, connected: boolean, botUsername?: string | null) {
   const db = getSupabaseAdmin();
   if (!db) return;
   // Mirrors the Settings tile's "Connected" badge (see connectors.ts). The
@@ -95,7 +121,7 @@ async function setConnectorRow(connected: boolean, botUsername?: string | null) 
   await db.from("connectors").upsert(
     {
       id: "telegram",
-      workspace_id: DEFAULT_WORKSPACE_ID,
+      workspace_id: ws,
       connected,
       access_token: null,
       refresh_token: null,
@@ -110,6 +136,7 @@ async function setConnectorRow(connected: boolean, botUsername?: string | null) 
  *  fresh secret, then stores the token encrypted in Vault. Order matters:
  *  nothing is saved unless Telegram accepted both calls. */
 export async function connectTelegram(
+  ws: string,
   rawToken: string,
   origin: string,
   ownerUserId: string,
@@ -146,10 +173,27 @@ export async function connectTelegram(
     };
   }
 
+  // One bot can only send its updates to one place. If another account already uses this bot, taking it
+  // over would silently cut that account off (and route its messages here), so refuse.
+  const { data: taken } = await db
+    .from("telegram_connections")
+    .select("workspace_id")
+    .eq("bot_id", me.id)
+    .neq("workspace_id", ws)
+    .limit(1)
+    .maybeSingle();
+  if (taken) {
+    return {
+      ok: false,
+      error:
+        "That bot is already connected to another ADUF account. Create your own with @BotFather (send /newbot) and paste its token.",
+    };
+  }
+
   const secret = randomBytes(32).toString("hex"); // hex ⊂ [A-Za-z0-9_-], as Telegram requires
   try {
     await tgCall(token, "setWebhook", {
-      url: `${origin}/api/connectors/telegram/webhook`,
+      url: telegramWebhookUrl(origin, ws),
       secret_token: secret,
       // business_* updates are how Telegram delivers the owner's own customer
       // DMs once the bot is added under Telegram → Settings → Business → Chatbots.
@@ -164,7 +208,7 @@ export async function connectTelegram(
   }
 
   const { error } = await db.rpc("store_telegram_connection", {
-    p_workspace_id: DEFAULT_WORKSPACE_ID,
+    p_workspace_id: ws,
     p_bot_token: token,
     p_bot_id: me.id,
     p_bot_username: me.username ?? null,
@@ -178,34 +222,34 @@ export async function connectTelegram(
   }
 
   // A fresh bot starts with nobody paired: drop chats from any previous bot.
-  await db.from("telegram_paired_chats").delete().eq("workspace_id", DEFAULT_WORKSPACE_ID);
+  await db.from("telegram_paired_chats").delete().eq("workspace_id", ws);
   await db
     .from("telegram_connections")
     .update({ pairing_code: newPairingCode(), owner_user_id: ownerUserId })
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID);
+    .eq("workspace_id", ws);
 
-  await setConnectorRow(true, me.username ?? null);
+  await setConnectorRow(ws, true, me.username ?? null);
   return { ok: true, botUsername: me.username ?? null };
 }
 
-export async function disconnectTelegram(): Promise<void> {
+export async function disconnectTelegram(ws: string): Promise<void> {
   const db = getSupabaseAdmin();
   if (!db) throw new Error("No backend configured.");
-  const token = await resolveTelegramToken();
+  const token = await resolveTelegramToken(ws);
   if (token) await tgCall(token, "deleteWebhook").catch(() => undefined);
   const { error } = await db.rpc("delete_telegram_connection", {
-    p_workspace_id: DEFAULT_WORKSPACE_ID,
+    p_workspace_id: ws,
   });
   if (error) throw new Error(`Failed to disconnect: ${error.message}`);
-  await setConnectorRow(false);
+  await setConnectorRow(ws, false);
 }
 
 /** Decrypted bot token, server-side only. Null if not connected. */
-export async function resolveTelegramToken(): Promise<string | null> {
+export async function resolveTelegramToken(ws: string): Promise<string | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
   const { data, error } = await db.rpc("get_decrypted_telegram_token", {
-    p_workspace_id: DEFAULT_WORKSPACE_ID,
+    p_workspace_id: ws,
   });
   if (error || typeof data !== "string" || !data) return null;
   return data;
@@ -213,14 +257,17 @@ export async function resolveTelegramToken(): Promise<string | null> {
 
 /** Constant-time check of the X-Telegram-Bot-Api-Secret-Token header against
  *  the stored hash. */
-export async function verifyTelegramWebhookSecret(header: string | null): Promise<boolean> {
+export async function verifyTelegramWebhookSecret(
+  ws: string,
+  header: string | null,
+): Promise<boolean> {
   if (!header) return false;
   const db = getSupabaseAdmin();
   if (!db) return false;
   const { data } = await db
     .from("telegram_connections")
     .select("webhook_secret_hash, connected")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .maybeSingle();
   if (!data || !data["connected"]) return false;
   const expected = Buffer.from(data["webhook_secret_hash"] as string, "hex");
@@ -256,7 +303,7 @@ export interface TgUpdate {
 
 /** Stores an inbound message. Returns true only if this update_id was new —
  *  Telegram retries slow webhooks, and the caller must not answer twice. */
-export async function recordInboundUpdate(update: TgUpdate): Promise<boolean> {
+export async function recordInboundUpdate(ws: string, update: TgUpdate): Promise<boolean> {
   const db = getSupabaseAdmin();
   const msg = update.message ?? update.channel_post;
   if (!db || !msg) return false;
@@ -264,7 +311,7 @@ export async function recordInboundUpdate(update: TgUpdate): Promise<boolean> {
     .from("telegram_messages")
     .upsert(
       {
-        workspace_id: DEFAULT_WORKSPACE_ID,
+        workspace_id: ws,
         update_id: update.update_id,
         direction: "in",
         chat_id: msg.chat.id,
@@ -286,6 +333,7 @@ export async function recordInboundUpdate(update: TgUpdate): Promise<boolean> {
 /** Last few turns of one chat, oldest first, excluding the update being
  *  answered right now. Fed to the agent as conversation history. */
 export async function fetchChatTurns(
+  ws: string,
   chatId: number,
   excludeUpdateId: number,
   limit = 12,
@@ -295,7 +343,7 @@ export async function fetchChatTurns(
   const { data } = await db
     .from("telegram_messages")
     .select("direction, text, update_id")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .eq("chat_id", chatId)
     .order("received_at", { ascending: false })
     .limit(limit + 1);
@@ -311,13 +359,13 @@ export async function fetchChatTurns(
 
 // --- Pairing ---------------------------------------------------------------
 
-export async function isChatPaired(chatId: number): Promise<boolean> {
+export async function isChatPaired(ws: string, chatId: number): Promise<boolean> {
   const db = getSupabaseAdmin();
   if (!db) return false;
   const { data } = await db
     .from("telegram_paired_chats")
     .select("chat_id")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .eq("chat_id", chatId)
     .maybeSingle();
   return Boolean(data);
@@ -325,6 +373,7 @@ export async function isChatPaired(chatId: number): Promise<boolean> {
 
 /** Pairs a chat if `code` matches the current pairing code. */
 export async function tryPairChat(
+  ws: string,
   chatId: number,
   displayName: string | null,
   code: string,
@@ -334,7 +383,7 @@ export async function tryPairChat(
   const { data } = await db
     .from("telegram_connections")
     .select("pairing_code")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .maybeSingle();
   const expected = (data?.["pairing_code"] as string | null) ?? "";
   const given = code.trim().toUpperCase();
@@ -344,31 +393,31 @@ export async function tryPairChat(
   const { error } = await db
     .from("telegram_paired_chats")
     .upsert(
-      { workspace_id: DEFAULT_WORKSPACE_ID, chat_id: chatId, display_name: displayName },
+      { workspace_id: ws, chat_id: chatId, display_name: displayName },
       { onConflict: "workspace_id,chat_id" },
     );
   return !error;
 }
 
 /** New code + unpair every chat. Use if the code leaked or a device is lost. */
-export async function resetPairing(): Promise<void> {
+export async function resetPairing(ws: string): Promise<void> {
   const db = getSupabaseAdmin();
   if (!db) throw new Error("No backend configured.");
-  await db.from("telegram_paired_chats").delete().eq("workspace_id", DEFAULT_WORKSPACE_ID);
+  await db.from("telegram_paired_chats").delete().eq("workspace_id", ws);
   const { error } = await db
     .from("telegram_connections")
     .update({ pairing_code: newPairingCode(), updated_at: new Date().toISOString() })
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID);
+    .eq("workspace_id", ws);
   if (error) throw new Error(`Failed to reset pairing: ${error.message}`);
 }
 
-export async function getOwnerUserId(): Promise<string | null> {
+export async function getOwnerUserId(ws: string): Promise<string | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
   const { data } = await db
     .from("telegram_connections")
     .select("owner_user_id")
-    .eq("workspace_id", DEFAULT_WORKSPACE_ID)
+    .eq("workspace_id", ws)
     .maybeSingle();
   return (data?.["owner_user_id"] as string | null) ?? null;
 }
@@ -401,11 +450,11 @@ function chunkText(text: string, max = 3800): string[] {
   return chunks.length ? chunks : [""];
 }
 
-async function logOutbound(chatId: number, text: string) {
+async function logOutbound(ws: string, chatId: number, text: string) {
   const db = getSupabaseAdmin();
   if (!db) return;
   const { error } = await db.from("telegram_messages").insert({
-    workspace_id: DEFAULT_WORKSPACE_ID,
+    workspace_id: ws,
     direction: "out",
     chat_id: chatId,
     chat_type: "private",
@@ -418,11 +467,12 @@ async function logOutbound(chatId: number, text: string) {
  *  markdown as Telegram HTML, falls back to plain text if Telegram rejects
  *  the formatting, splits long text, and logs the reply as chat history. */
 export async function sendTelegramMessage(
+  ws: string,
   chatId: number,
   text: string,
   opts: { log?: boolean } = {},
 ): Promise<void> {
-  const token = await resolveTelegramToken();
+  const token = await resolveTelegramToken(ws);
   if (!token) throw new Error("Telegram isn't connected.");
   for (const chunk of chunkText(text)) {
     try {
@@ -436,11 +486,11 @@ export async function sendTelegramMessage(
       await tgCall(token, "sendMessage", { chat_id: chatId, text: chunk });
     }
   }
-  if (opts.log !== false) await logOutbound(chatId, text);
+  if (opts.log !== false) await logOutbound(ws, chatId, text);
 }
 
-export async function sendTypingAction(chatId: number): Promise<void> {
-  const token = await resolveTelegramToken();
+export async function sendTypingAction(ws: string, chatId: number): Promise<void> {
+  const token = await resolveTelegramToken(ws);
   if (!token) return;
   await tgCall(token, "sendChatAction", { chat_id: chatId, action: "typing" }).catch(
     () => undefined,
